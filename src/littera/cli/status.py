@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+import sys
+
+from littera.db.workdb import open_work_db
+
+
+def register(app):
+    @app.command()
+    def status():
+        try:
+            with open_work_db() as db:
+                work_name = db.work_dir.name
+
+                print(f"Littera work: {work_name}\n")
+                print("Database:")
+
+                started = "started" if db.started_here else "already running"
+                print(
+                    f"  ✓ Embedded Postgres available ({started}, port {db.pg_cfg.port})"
+                )
+                print(f"  ✓ Database: {db.pg_cfg.db_name}")
+
+                cur = db.conn.cursor()
+
+                def count(table: str) -> int:
+                    cur.execute(f"SELECT COUNT(*) FROM {table}")
+                    return cur.fetchone()[0]
+
+                print("\nContent:")
+                print(f"  • Documents: {count('documents')}")
+                print(f"  • Sections:  {count('sections')}")
+                print(f"  • Blocks:    {count('blocks')}")
+                print(f"  • Entities:  {count('entities')}")
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)

@@ -1,0 +1,8 @@
+#nav {
+  width: 30%;
+  border: tall $primary;
+}
+
+#detail {
+  padding: 1;
+}

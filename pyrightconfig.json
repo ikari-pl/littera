@@ -1,0 +1,22 @@
+{
+  "include": [
+    "src/**/*.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.*",
+    "tests/**"
+  ],
+  "defineConstant": {
+    "APP_NAME": "Littera"
+  },
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "strict",
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "error",
+  "reportUnsupportedType": "error",
+  "reportIncompatibleMethodOverride": "error",
+  "reportIncompatibleVariableOverride": "error",
+  "reportUntypedFunctionDefinition": "error",
+  "reportUntypedClassDecorator": "error"
+}

@@ -1,0 +1,40 @@
+[project]
+name = "littera"
+version = "0.0.0"
+description = "Literature meets refactoring"
+requires-python = ">=3.11"
+
+dependencies = [
+  "psycopg>=3",
+  "typer>=0.9",
+  "rich>=13",
+  "PyYAML>=6",
+  "textual>=0.50",
+]
+
+[project.scripts]
+littera = "littera.cli.app:app"
+
+[tool.mypy]
+disable_error_code = [
+    "attr-defined",
+    "assignment",
+    "call-arg",
+    "operator",
+    "return-value",
+]
+
+[tool.pyright]
+strict = ["type-check", "reportUnusedFunction"]
+reportMissingImports = "error"
+reportMissingTypeStubs = "error"
+reportUnsupportedType = "error"
+reportInconsistentMethodOverride = "error"
+reportIncompatibleVariableOverride = "error"
+reportUntypedFunctionDefinition = "error"
+reportMissingImports = false
+littera = "littera.cli.app:app"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
