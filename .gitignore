@@ -1,0 +1,25 @@
+# Littera gitignore
+
+# Embedded Postgres binaries and build artifacts
+.littera/pg/
+*.pyc
+__pycache__/
+
+# Development caches and state
+.pytest_cache/
+.coverage/
+.eggs/
+dist/
+build/
+*.egg-info/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
