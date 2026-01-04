@@ -1,6 +1,5 @@
 from textual.containers import Horizontal
 from textual.widgets import ListItem, ListView, Static
-
 from littera.tui.state import AppState
 from littera.tui.views.base import View
 
@@ -21,8 +20,7 @@ class OutlineView(View):
             rows = cur.fetchall()
             if not rows:
                 items = []
-                detail = "No documents yet.
-\nPress 'a' to add a document."
+                detail = "No documents yet.\nPress 'a' to add a document."
             else:
                 for doc_id, title in rows:
                     items.append(ListItem(Static(f"DOC  {title}"), id=f"doc_{doc_id}"))
@@ -38,13 +36,13 @@ class OutlineView(View):
                 rows = cur.fetchall()
                 if not rows:
                     items = []
-                    detail = f"No sections in {last.title} yet.\n\nPress 'a' to add a section."
+                    detail = "No sections in {last.title} yet.\n\nPress 'a' to add a section."
                 else:
                     for sec_id, title in rows:
                         items.append(
                             ListItem(Static(f"SEC  {title}"), id=f"sec_{sec_id}")
                         )
-                    detail = f"Sections in {last.title}\na: add section  Ctrl+E: edit title  d: delete"
+                    detail = "Sections in {last.title}\na: add section  Ctrl+E: edit title  d: delete"
             elif last.kind == "section":
                 # Show blocks
                 cur.execute(
@@ -55,7 +53,7 @@ class OutlineView(View):
                 if not rows:
                     items = []
                     detail = (
-                        f"No blocks in {last.title} yet.\n\nPress 'a' to add a block."
+                        "No blocks in {last.title} yet.\n\nPress 'a' to add a block."
                     )
                 else:
                     for block_id, lang, text in rows:
@@ -74,6 +72,7 @@ class OutlineView(View):
         if sel and sel.id:
             cur = state.db.cursor()
             raw_id = sel.id.split("_", 1)[1] if "_" in sel.id else sel.id
+
             if sel.kind == "document":
                 cur.execute("SELECT title FROM documents WHERE id = %s", (raw_id,))
                 row = cur.fetchone()
