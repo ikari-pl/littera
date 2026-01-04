@@ -38,6 +38,7 @@ class LitteraApp(App):
         ("e", "entities", "Entities"),
         ("n", "edit_note", "Edit Note"),
         ("enter", "edit_block", "Edit Block"),
+        ("a", "add_item", "Add Item"),
         ("ctrl+s", "save", "Save"),
         ("ctrl+z", "undo", "Undo"),
         ("ctrl+y", "redo", "Redo"),
@@ -168,6 +169,53 @@ class LitteraApp(App):
             f"Block ({lang})",
             text,
         )
+
+    def action_add_item(self) -> None:
+        if self.state is None:
+            return
+        if self.state.view != "outline":
+            return
+
+        import uuid
+
+        cur = self.state.db.cursor()
+
+        if self.state.nav_level == "documents":
+            title = f"Doc {uuid.uuid4().hex[:8]}"
+            doc_id = str(uuid.uuid4())
+            work_id = self.state.work["work"]["id"]
+            cur.execute(
+                "INSERT INTO documents (id, work_id, title) VALUES (%s, %s, %s)",
+                (doc_id, work_id, title),
+            )
+            self.state.db.commit()
+            self.state.selection = Selection(kind="document", id=doc_id)
+            self._render_view()
+
+        elif self.state.nav_level == "sections":
+            if not self.state.document_id:
+                return
+            title = f"Sec {uuid.uuid4().hex[:8]}"
+            section_id = str(uuid.uuid4())
+            cur.execute(
+                "INSERT INTO sections (id, document_id, title, order_index) VALUES (%s, %s, %s, COALESCE((SELECT MAX(order_index)+1 FROM sections WHERE document_id = %s), 1))",
+                (section_id, self.state.document_id, title, self.state.document_id),
+            )
+            self.state.db.commit()
+            self.state.selection = Selection(kind="section", id=section_id)
+            self._render_view()
+
+        elif self.state.nav_level == "blocks":
+            if not self.state.section_id:
+                return
+            block_id = str(uuid.uuid4())
+            cur.execute(
+                "INSERT INTO blocks (id, section_id, block_type, language, source_text) VALUES (%s, %s, 'paragraph', 'en', '(new block)')",
+                (block_id, self.state.section_id),
+            )
+            self.state.db.commit()
+            self.state.selection = Selection(kind="block", id=block_id)
+            self._render_view()
 
     def action_save(self) -> None:
         if self.state is None:

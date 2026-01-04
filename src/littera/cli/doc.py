@@ -18,8 +18,10 @@ def register(app):
                     (doc_id, work_id, title),
                 )
                 db.conn.commit()
-        except RuntimeError as e:
-            print(str(e))
+        except Exception as e:
+            print(f"Error: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
 
         print(f"✓ Document added: {title}")
@@ -32,8 +34,10 @@ def register(app):
                 cur = db.conn.cursor()
                 cur.execute("SELECT id, title FROM documents ORDER BY created_at")
                 rows = cur.fetchall()
-        except RuntimeError as e:
-            print(str(e))
+        except Exception as e:
+            print(f"Error: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
 
         if not rows:
