@@ -10,7 +10,7 @@ class EntitiesView(View):
 
     def render(self, state: AppState):
         items = []
-        detail = "Select an entity"
+        detail = "Select an entity (n: edit note, o: outline)"
 
         cur = state.db.cursor()
         cur.execute(
@@ -21,8 +21,9 @@ class EntitiesView(View):
             label = name or "(unnamed)"
             items.append(ListItem(Static(f"{entity_type}: {label}"), id=str(entity_id)))
 
-        if state.selection.kind == "entity" and state.selection.id:
-            entity_id = state.selection.id
+        sel = state.entity_selection
+        if sel and sel.kind == "entity" and sel.id:
+            entity_id = sel.id
             cur.execute(
                 "SELECT entity_type, canonical_label FROM entities WHERE id = %s",
                 (entity_id,),
