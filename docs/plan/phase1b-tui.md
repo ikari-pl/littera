@@ -51,10 +51,17 @@ In progress.
   - avoid highlight-triggered rerender loops
 - Done: TUI mention linking aligns with schema `(block_id, entity_id, language)`
 - Tests: `pytest -q tests/tui` passes
+- ✅ All major TUX patterns implemented and tested
 
-Known risk:
+## Progress Summary
 
-- UX correctness and event semantics are still being stabilized (this is why Phase 1 was split).
+- **Navigation UX (Outline)**: ✅ COMPLETE
+- **Entities UX**: ✅ COMPLETE  
+- **Editing**: ✅ COMPLETE
+- **Mentions**: ✅ COMPLETE
+- **TUI Tests**: ✅ COMPLETE
+
+Ready to proceed with remaining Phase 1B items.
 
 ## Checklist
 
@@ -76,21 +83,21 @@ Known risk:
 
 ### C. Entities UX
 
-- [ ] Entity list with stable selection
-- [ ] Entity detail: labels, mentions, and work-scoped note
-- [ ] Navigation between outline and entities without losing context unexpectedly
+- [x] Entity list with stable selection
+- [x] Entity detail: labels, mentions, and work-scoped note
+- [x] Navigation between outline and entities without losing context unexpectedly
 
 ### D. Editing
 
-- [ ] Block edit opens editor overlay
-- [ ] Entity note edit opens editor overlay
-- [ ] Save writes to DB and returns to prior base context
-- [ ] Undo/redo scoped to current edit session
+- [x] Block edit opens editor overlay
+- [x] Entity note edit opens editor overlay
+- [x] Save writes to DB and returns to prior base context
+- [x] Undo/redo scoped to current edit session
 
 ### E. Mentions
 
 - [x] Link entity to selected block (schema-correct)
-- [ ] Provide a UI flow that makes linking discoverable and hard to misuse
+- [x] Provide a UI flow that makes linking discoverable and hard to misuse
 
 ### F. TUI Tests
 
