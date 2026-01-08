@@ -23,3 +23,6 @@ build/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Test work directory
+my-work/
