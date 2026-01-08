@@ -9,6 +9,8 @@ Comprehensive Phase 1 unit test suite.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -21,13 +23,19 @@ from littera.db.workdb import open_work_db
 
 
 def run_cli(app: typer.Typer, cmd: str, cwd: Path) -> str:
-    import subprocess
-
-    env = {"LITTERA_PG_LEASE_SECONDS": "0"}
-    res = subprocess.run(
-        cmd, cwd=cwd, shell=True, capture_output=True, text=True, env=env
-    )
-    return res.stdout
+    """Run a CLI command in a work directory."""
+    # When called from subprocess, we need to use the full path to python module
+    repo_root = Path(__file__).parents[1]
+    python_path = f"{repo_root}/.venv/bin/python"
+    module_cmd = f"{python_path} -m littera {cmd.replace('littera ', '')}"
+    return subprocess.run(
+        module_cmd,
+        cwd=cwd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": os.environ.get("PATH", ""), "LITTERA_PG_LEASE_SECONDS": "0"},
+    ).stdout
 
 
 def test_entity_note_cli_roundtrip(tmp_path: Path) -> None:
@@ -50,19 +58,22 @@ def test_block_edit_cli_via_fallback(tmp_path: Path) -> None:
     run_cli(app, "littera section-add 1 Sec", workdir)
     run_cli(app, "littera block-add 1 --lang en 'Old'", workdir)
 
-    # Simulate stdin input for block-edit fallback
+    # Simulate stdin input for block-edit fallback using proper CLI call
     import subprocess
-
-    echo = subprocess.Popen(["echo", "New"], stdout=subprocess.PIPE)
-    edit = subprocess.run(
-        ["littera", "block-edit", "1"],
+    
+    repo_root = Path(__file__).parents[1]
+    python_path = f"{repo_root}/.venv/bin/python"
+    
+    # Run block-edit with stdin input
+    result = subprocess.run(
+        [python_path, "-m", "littera", "block-edit", "1"],
         cwd=workdir,
         input="New\n",
         capture_output=True,
         text=True,
         env={"EDITOR": "", "LITTERA_PG_LEASE_SECONDS": "0"},
     )
-    assert edit.returncode == 0
+    assert result.returncode == 0
     out = run_cli(app, "littera block-list 1", workdir)
     assert "New" in out
 
