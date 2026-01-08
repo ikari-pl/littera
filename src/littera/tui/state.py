@@ -1,18 +1,27 @@
 from dataclasses import dataclass, field
-from typing import Optional, Literal, Any
+from typing import Optional, Literal, Any, Union
+from pathlib import Path
 
 from littera.tui.undo import UndoRedo
 
 
-ViewName = Literal[
-    "outline",
-    "entities",
-    "editor",
-]
+# Data types and enums
 
 ModeName = Literal["browse", "edit", "command"]
 
+ViewName = Literal["outline", "entities", "editor"]
 
+EditKind = Literal["entity_note", "block_text"]
+
+
+# Selection
+@dataclass(frozen=True)
+class Selection:
+    kind: Optional[str] = None
+    id: Optional[str] = None
+
+
+# Path elements for outline navigation
 @dataclass(frozen=True)
 class PathElement:
     kind: str  # "work", "document", "section", "block"
@@ -20,88 +29,142 @@ class PathElement:
     title: str
 
 
-EditKind = Literal["entity_note", "block_text"]
+# Edit session
+@dataclass
+class EditSession:
+    target: "EditTarget"
+    original_text: str
+    current_text: str
+    return_to: Literal["outline", "entities"]
 
 
+# Edit target
 @dataclass(frozen=True)
 class EditTarget:
     kind: EditKind
     id: str
 
 
+# View states
 @dataclass
-class EditSession:
-    target: EditTarget
-    original_text: str
-    current_text: str
+class OutlineState:
+    """State for outline navigation (documents -> sections -> blocks)."""
+
+    path: list[PathElement] = field(default_factory=list)
+    selection: Selection = field(default_factory=Selection)
 
 
 @dataclass
-class Selection:
-    kind: Optional[str] = None  # "entity"
-    id: Optional[str] = None
+class EntitiesState:
+    """State for entities view."""
+
+    selection: Selection = field(default_factory=Selection)
 
 
+@dataclass
+class EditorOverlay:
+    """Overlay state for editing (push/pop on top of a base view)."""
+
+    session: EditSession
+    return_to: ViewName
+
+
+# App state
 @dataclass
 class AppState:
-    view: ViewName = "outline"
-    mode: ModeName = "browse"
+    """App state with explicit view contexts."""
 
-    # Navigation path: work -> document -> section -> block
-    # Empty path means at work level (showing documents)
-    path: list[PathElement] = field(default_factory=list)
+    # Current mode/view
+    view: ViewName = "browse"
 
-    # Entity selection (separate from outline navigation)
-    entity_selection: Optional[Selection] = field(default_factory=Selection)
+    # Context for each view
+    active_base: ViewName = "browse"  # The current underlying view
+    outline: OutlineState = field(default_factory=OutlineState)
+    entities: EntitiesState = field(default_factory=EntitiesState)
+    editor: Optional[EditorOverlay] = None
 
-    # Editor overlay (None when not editing)
-    edit_session: Optional[EditSession] = None
-
-    # Undo/redo stack
+    # Undo/redo state
     undo_redo: UndoRedo = field(default_factory=UndoRedo)
 
-    # Context
-    work: Optional[dict] = None
-    db: Optional[Any] = None
+    # Work context
+    work: Optional[dict[str, Any]] = None
 
-    # Helpers
-    @property
-    def current_document(self) -> Optional[PathElement]:
-        for p in reversed(self.path):
-            if p.kind == "document":
-                return p
-        return None
+    # Database connection
+    db: Any = None
 
-    @property
-    def current_section(self) -> Optional[PathElement]:
-        for p in reversed(self.path):
-            if p.kind == "section":
-                return p
-        return None
 
-    @property
-    def current_block(self) -> Optional[PathElement]:
-        for p in reversed(self.path):
-            if p.kind == "block":
-                return p
-        return None
+# Actions
 
-    @property
-    def can_go_back(self) -> bool:
-        if self.view == "editor":
-            return True
-        if self.view == "entities":
-            return self.entity_selection.kind == "entity"
-        return len(self.path) > 0
 
-    @property
-    def nav_level(self) -> str:
-        """Current navigation depth for views that need it."""
-        if not self.path:
-            return "documents"
-        last = self.path[-1]
-        if last.kind == "document":
-            return "sections"
-        elif last.kind == "section":
-            return "blocks"
-        return "documents"
+@dataclass(frozen=True)
+class GotoOutline:
+    pass
+
+
+@dataclass(frozen=True)
+class GotoEntities:
+    pass
+
+
+@dataclass(frozen=True)
+class ClearSelection:
+    pass
+
+
+@dataclass(frozen=True)
+class OutlineSelect:
+    kind: str
+    item_id: str
+
+
+@dataclass(frozen=True)
+class OutlineClearSelection:
+    pass
+
+
+@dataclass(frozen=True)
+class OutlinePush:
+    element: PathElement
+
+
+@dataclass(frozen=True)
+class OutlinePop:
+    pass
+
+
+@dataclass(frozen=True)
+class EntitiesSelect:
+    entity_id: str
+
+
+@dataclass(frozen=True)
+class EntitiesClearSelection:
+    pass
+
+
+@dataclass(frozen=True)
+class StartEdit:
+    target: EditTarget
+    text: str
+    return_to: ViewName
+
+
+@dataclass(frozen=True)
+class ExitEditor:
+    pass
+
+
+# Action type
+Action = (
+    GotoOutline,
+    GotoEntities,
+    ClearSelection,
+    OutlineSelect,
+    OutlineClearSelection,
+    OutlinePush,
+    OutlinePop,
+    EntitiesSelect,
+    EntitiesClearSelection,
+    StartEdit,
+    ExitEditor,
+)

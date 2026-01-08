@@ -4,6 +4,7 @@ Test for editing functionality from phase1b-tui.md.
 This tests that editing overlay opens for blocks and entities correctly.
 """
 
+import pytest
 from littera.tui.views.editor import EditorView
 from littera.tui.state import AppState, EditSession, EditTarget, StartEdit
 from unittest.mock import Mock
@@ -24,12 +25,17 @@ class TestEditingFunctionality:
             target=EditTarget(kind="block_text", id="blk1"),
             original_text="original block text",
             current_text="edited block text",
+            return_to="outline",  # Add return_to parameter
         )
 
         # Set up state with edit session
-        state.dispatch(StartEdit())
-        state.edit_session = session
-        state.active_base = "editor"
+        state.dispatch(
+            StartEdit(
+                target=session.target,
+                text=session.original_text,
+                return_to=session.return_to,
+            )
+        )
 
         # Editor view should render
         editor_view = EditorView()
@@ -49,12 +55,17 @@ class TestEditingFunctionality:
             target=EditTarget(kind="entity_note", id="ent1"),
             original_text="original note text",
             current_text="edited note text",
+            return_to="entities",  # Add return_to parameter
         )
 
         # Set up state with edit session
-        state.dispatch(StartEdit())
-        state.edit_session = session
-        state.active_base = "editor"
+        state.dispatch(
+            StartEdit(
+                target=session.target,
+                text=session.original_text,
+                return_to=session.return_to,
+            )
+        )
 
         # Editor view should render with note title
         editor_view = EditorView()

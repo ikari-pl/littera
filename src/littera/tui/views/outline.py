@@ -1,5 +1,6 @@
 from textual.containers import Horizontal
 from textual.widgets import ListItem, ListView, Static
+
 from littera.tui.state import AppState
 from littera.tui.views.base import View
 
@@ -8,7 +9,7 @@ class OutlineView(View):
     name = "outline"
 
     def render(self, state: AppState):
-        items = []
+        items: list[ListItem] = []
         detail = "Select an item (Enter: drill down, a: add, Ctrl+E: edit title, d: delete, Esc: back)"
 
         cur = state.db.cursor()
@@ -19,11 +20,11 @@ class OutlineView(View):
             cur.execute("SELECT id, title FROM documents ORDER BY created_at")
             rows = cur.fetchall()
             if not rows:
-                items = []
                 detail = "No documents yet.\nPress 'a' to add a document."
             else:
                 for doc_id, title in rows:
-                    items.append(ListItem(Static(f"DOC  {title}"), id=f"doc_{doc_id}"))
+                    # Textual widget ids can't start with a number; prefix the UUID.
+                    items.append(ListItem(Static(f"DOC  {title}"), id=f"doc-{doc_id}"))
                 detail = "Documents\na: add document  Ctrl+E: edit title  d: delete"
         else:
             last = state.path[-1]
@@ -35,14 +36,13 @@ class OutlineView(View):
                 )
                 rows = cur.fetchall()
                 if not rows:
-                    items = []
-                    detail = "No sections in {last.title} yet.\n\nPress 'a' to add a section."
+                    detail = f"No sections in {last.title} yet.\n\nPress 'a' to add a section."
                 else:
                     for sec_id, title in rows:
                         items.append(
-                            ListItem(Static(f"SEC  {title}"), id=f"sec_{sec_id}")
+                            ListItem(Static(f"SEC  {title}"), id=f"sec-{sec_id}")
                         )
-                    detail = "Sections in {last.title}\na: add section  Ctrl+E: edit title  d: delete"
+                    detail = f"Sections in {last.title}\na: add section  Ctrl+E: edit title  d: delete"
             elif last.kind == "section":
                 # Show blocks
                 cur.execute(
@@ -51,32 +51,27 @@ class OutlineView(View):
                 )
                 rows = cur.fetchall()
                 if not rows:
-                    items = []
                     detail = (
-                        "No blocks in {last.title} yet.\n\nPress 'a' to add a block."
+                        f"No blocks in {last.title} yet.\n\nPress 'a' to add a block."
                     )
                 else:
                     for block_id, lang, text in rows:
                         preview = text.replace("\n", " ")[:60]
                         items.append(
                             ListItem(
-                                Static(f"BLK  ({lang}) {preview}"), id=f"blk_{block_id}"
+                                Static(f"BLK  ({lang}) {preview}"), id=f"blk-{block_id}"
                             )
                         )
-                    detail = (
-                        f"Blocks in {last.title}\na: add block  d: delete  Enter: edit"
-                    )
+                    detail = f"Blocks in {last.title}\na: add block  d: delete  Enter: edit  l: link"
 
-        # Show selection details if any
         sel = state.entity_selection
         if sel and sel.id:
-            cur = state.db.cursor()
-            raw_id = sel.id.split("_", 1)[1] if "_" in sel.id else sel.id
+            raw_id = sel.id
 
             if sel.kind == "document":
                 cur.execute("SELECT title FROM documents WHERE id = %s", (raw_id,))
                 row = cur.fetchone()
-                title = row[0] if row else sel.id
+                title = row[0] if row else raw_id
                 cur.execute(
                     "SELECT COUNT(*) FROM sections WHERE document_id = %s",
                     (raw_id,),
@@ -88,7 +83,7 @@ class OutlineView(View):
             elif sel.kind == "section":
                 cur.execute("SELECT title FROM sections WHERE id = %s", (raw_id,))
                 row = cur.fetchone()
-                title = row[0] if row else sel.id
+                title = row[0] if row else raw_id
                 cur.execute(
                     "SELECT COUNT(*) FROM blocks WHERE section_id = %s",
                     (raw_id,),
@@ -103,9 +98,9 @@ class OutlineView(View):
                 row = cur.fetchone()
                 if row:
                     lang, text = row
-                    detail = f"Block ({lang})\n\n{text}\n\nEnter: edit"
+                    detail = f"Block ({lang})\n\n{text}\n\nEnter: edit  l: link"
                 else:
-                    detail = f"Block: {sel.id}"
+                    detail = f"Block: {raw_id}"
 
         return [
             Horizontal(
