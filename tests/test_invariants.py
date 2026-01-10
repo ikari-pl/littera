@@ -10,6 +10,13 @@ from pathlib import Path
 
 def run(cmd: str, cwd: Path) -> subprocess.CompletedProcess:
     """Run a CLI command in a work directory."""
+    # Replace 'littera' with 'python -m littera' for proper module invocation
+    repo_root = Path(__file__).parents[1]
+    python_path = f"{repo_root}/.venv/bin/python"
+    if cmd.startswith("littera "):
+        cmd = f"{python_path} -m littera {cmd[8:]}"
+    elif cmd == "littera":
+        cmd = f"{python_path} -m littera"
     return subprocess.run(
         cmd,
         cwd=cwd,
@@ -71,19 +78,19 @@ def init_work(tmp_path: Path):
 
 
 def add_document(workdir: Path, title: str = "Doc") -> None:
-    res = run(f"littera doc-add '{title}'", cwd=workdir)
+    res = run(f"littera doc add '{title}'", cwd=workdir)
     assert res.returncode == 0, res.stderr
 
 
 def add_section(workdir: Path, title: str = "Section") -> None:
     # assumes single document
-    res = run(f"littera section-add 1 '{title}'", cwd=workdir)
+    res = run(f"littera section add 1 '{title}'", cwd=workdir)
     assert res.returncode == 0, res.stderr
 
 
 def add_block(workdir: Path, text: str = "Text", lang: str = "en") -> None:
     # assumes single section
-    res = run(f"littera block-add 1 --lang {lang} '{text}'", cwd=workdir)
+    res = run(f"littera block add 1 '{text}' --lang {lang}", cwd=workdir)
     assert res.returncode == 0, res.stderr
 
 
@@ -109,8 +116,8 @@ def test_init_creates_work(tmp_path):
 
 def test_doc_add_attached_to_work(tmp_path):
     with init_work(tmp_path) as workdir:
-        run("littera doc-add 'Test doc'", cwd=workdir)
-        res = run("littera doc-list", cwd=workdir)
+        run("littera doc add 'Test doc'", cwd=workdir)
+        res = run("littera doc list", cwd=workdir)
 
         assert res.returncode == 0
         assert "Test doc" in res.stdout
@@ -118,43 +125,43 @@ def test_doc_add_attached_to_work(tmp_path):
 
 def test_section_requires_document(tmp_path):
     with init_work(tmp_path) as workdir:
-        # No documents yet, section-add must fail
-        res = run("littera section-add 1 'Intro'", cwd=workdir)
+        # No documents yet, section add must fail
+        res = run("littera section add 1 'Intro'", cwd=workdir)
         assert res.returncode != 0
 
 
 def test_block_requires_section(tmp_path):
     with init_work(tmp_path) as workdir:
-        run("littera doc-add 'Doc'", cwd=workdir)
+        run("littera doc add 'Doc'", cwd=workdir)
 
-        # No sections yet, block-add must fail
-        res = run("littera block-add 1 --lang en 'Text'", cwd=workdir)
+        # No sections yet, block add must fail
+        res = run("littera block add 1 'Text' --lang en", cwd=workdir)
         assert res.returncode != 0
 
 
 def test_entities_exist_without_documents(tmp_path):
     # Entities are not scoped to documents/sections/blocks.
     with init_work(tmp_path) as workdir:
-        run("littera entity-add concept 'Time'", cwd=workdir)
-        res = run("littera entity-list", cwd=workdir)
+        run("littera entity add concept 'Time'", cwd=workdir)
+        res = run("littera entity list", cwd=workdir)
         assert res.returncode == 0
         assert "Time" in res.stdout
 
 
 def test_entity_notes_round_trip(tmp_path):
     with init_work(tmp_path) as workdir:
-        run("littera entity-add concept 'Being'", cwd=workdir)
-        run("littera entity-note-set concept Being 'Note A'", cwd=workdir)
+        run("littera entity add concept 'Being'", cwd=workdir)
+        run("littera entity note-set concept Being 'Note A'", cwd=workdir)
 
-        res = run("littera entity-note-show concept Being", cwd=workdir)
+        res = run("littera entity note-show concept Being", cwd=workdir)
         assert res.returncode == 0
         assert "Note A" in res.stdout
 
 
 def test_block_is_required_for_mentions(tmp_path):
     with init_work(tmp_path) as workdir:
-        run("littera entity-add concept 'Truth'", cwd=workdir)
-        res = run("littera mention-add 1 concept Truth", cwd=workdir)
+        run("littera entity add concept 'Truth'", cwd=workdir)
+        res = run("littera mention add 1 concept Truth", cwd=workdir)
         assert res.returncode != 0
 
 
