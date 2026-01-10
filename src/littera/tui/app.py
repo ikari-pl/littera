@@ -79,7 +79,6 @@ class LitteraApp(App):
         yield Horizontal(id="main")
         yield Footer()
 
-    @safe_action
     def on_mount(self) -> None:
         littera_dir = Path.cwd() / ".littera"
         if not littera_dir.exists():
