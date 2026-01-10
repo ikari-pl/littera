@@ -1,88 +1,76 @@
 """
 Test for specific navigation UX requirements from phase1b-tui.md.
 
-This test verifies that the left pane correctly lists the current level
-and that drilling down works as expected.
+This test verifies navigation state transitions work correctly.
 """
 
 import pytest
-import asyncio
-from pathlib import Path
-import os
-from littera.tui.app import LitteraApp
-from littera.tui.state import AppState, PathElement, OutlineSelect, OutlinePush
+from littera.tui.state import AppState, PathElement, OutlineSelect, OutlinePush, OutlinePop
 
 
-def test_outline_left_pane_lists_current_level(work_dir: Path):
-    """Left pane should list current level (docs → sections → blocks) reliably."""
-    # Test this through state logic rather than full app integration
-    # This avoids database setup issues while still testing the UX behavior
+def test_outline_navigation_state_transitions():
+    """Navigation state transitions should work correctly."""
+    state = AppState()
 
-    from littera.tui.app import LitteraApp
-    from unittest.mock import Mock, patch
+    # Initially at documents level
+    assert state.nav_level == "documents"
+    assert len(state.path) == 0
 
-    # Create app but mock the database setup to avoid failures
-    with (
-        patch("littera.tui.app.start_postgres"),
-        patch("littera.db.embedded_pg.EmbeddedPostgresManager"),
-        patch("psycopg.connect"),
-    ):
-        # Ensure we run in work_dir so app picks up config
-        os.chdir(work_dir)
+    # Select a document
+    state.dispatch(OutlineSelect(kind="document", item_id="doc-1"))
+    assert state.entity_selection.kind == "document"
+    assert state.entity_selection.id == "doc-1"
 
-        async def run():
-            app = LitteraApp()
+    # Drill down into document
+    state.dispatch(OutlinePush(PathElement(kind="document", id="doc-1", title="Test Doc")))
+    assert state.nav_level == "sections"
+    assert len(state.path) == 1
+    assert state.path[0].kind == "document"
 
-            # Mock the on_mount to avoid database issues
-            app.state = AppState()
-            app.state.work = {"work": {"id": "test-work"}}
-            app.state.db = Mock()
+    # Selection should be cleared after push
+    assert state.entity_selection.id is None
 
-            async with app.run_test() as pilot:
-                # Wait for app to mount
-                await pilot.pause()
+    # Select a section
+    state.dispatch(OutlineSelect(kind="section", item_id="sec-1"))
+    assert state.entity_selection.kind == "section"
 
-                # Should be at documents level initially
-                assert app.state.nav_level == "documents"
+    # Drill down into section
+    state.dispatch(OutlinePush(PathElement(kind="section", id="sec-1", title="Test Section")))
+    assert state.nav_level == "blocks"
+    assert len(state.path) == 2
 
-                # Check that left pane exists (even if empty due to mock DB)
-                try:
-                    # Mock some basic view rendering
-                    from littera.tui.views.outline import OutlineView
+    # Go back up
+    state.dispatch(OutlinePop())
+    assert state.nav_level == "sections"
+    assert len(state.path) == 1
 
-                    view = OutlineView()
+    # Go back to documents
+    state.dispatch(OutlinePop())
+    assert state.nav_level == "documents"
+    assert len(state.path) == 0
 
-                    # Mock cursor to return empty results
-                    mock_cursor = Mock()
-                    mock_cursor.fetchall.return_value = []
-                    mock_cursor.fetchone.return_value = None
-                    mock_cursor.execute.return_value = None
-                    app.state.db.cursor.return_value = mock_cursor
 
-                    # This should not crash and should return a layout
-                    result = view.render(app.state)
-                    assert len(result) == 1  # Should return layout container
+def test_current_document_and_section_properties():
+    """current_document and current_section properties should track path."""
+    state = AppState()
 
-                except Exception as e:
-                    # If rendering fails, at least the navigation state should be correct
-                    assert app.state.nav_level == "documents"
+    # No current document or section at start
+    assert state.current_document is None
+    assert state.current_section is None
 
-                # Test navigation state changes work correctly
-                # Simulate document selection and drill down
-                app.state.dispatch(
-                    OutlineSelect(kind="document", item_id="test-doc-id")
-                )
-                app.state.dispatch(
-                    OutlinePush(
-                        PathElement(kind="document", id="test-doc-id", title="Test Doc")
-                    )
-                )
+    # Push a document
+    state.dispatch(OutlinePush(PathElement(kind="document", id="doc-1", title="Doc 1")))
+    assert state.current_document is not None
+    assert state.current_document.id == "doc-1"
+    assert state.current_section is None
 
-                # Should now be at sections level
-                assert app.state.nav_level == "sections"
+    # Push a section
+    state.dispatch(OutlinePush(PathElement(kind="section", id="sec-1", title="Sec 1")))
+    assert state.current_document.id == "doc-1"
+    assert state.current_section is not None
+    assert state.current_section.id == "sec-1"
 
-                # Path should be updated
-                assert len(app.state.path) == 1
-                assert app.state.path[0].kind == "document"
-
-        asyncio.run(run())
+    # Pop section
+    state.dispatch(OutlinePop())
+    assert state.current_document.id == "doc-1"
+    assert state.current_section is None

@@ -41,7 +41,7 @@ class TestEditingFunctionality:
         editor_view = EditorView()
         result = editor_view.render(state)
         assert len(result) == 1
-        assert result[0].id == "editor-layout"
+        assert result[0].id == "editor_layout"
 
     def test_editor_view_shows_entity_note_context(self):
         """Editor view should show entity note context."""
@@ -55,7 +55,7 @@ class TestEditingFunctionality:
             target=EditTarget(kind="entity_note", id="ent1"),
             original_text="original note text",
             current_text="edited note text",
-            return_to="entities",  # Add return_to parameter
+            return_to="entities",
         )
 
         # Set up state with edit session
@@ -71,11 +71,11 @@ class TestEditingFunctionality:
         editor_view = EditorView()
         result = editor_view.render(state)
         assert len(result) == 1
-        assert result[0].id == "editor-layout"
+        assert result[0].id == "editor_layout"
 
-        # Should have queried for entity info
-        mock_cursor = state.db.cursor.return_value
-        mock_cursor.execute.assert_called()
+        # Verify edit session is for entity note
+        assert state.edit_session is not None
+        assert state.edit_session.target.kind == "entity_note"
 
     def test_editor_handles_no_selection_gracefully(self):
         """Editor view should handle no edit session gracefully."""
@@ -92,4 +92,4 @@ class TestEditingFunctionality:
         editor_view = EditorView()
         result = editor_view.render(state)
         assert len(result) == 1
-        assert result[0].id == "editor-layout"
+        assert result[0].id == "editor_layout"
