@@ -728,11 +728,17 @@ class LitteraApp(App):
         widgets = view.render(self.state)
         await container.mount_all(widgets)
 
-        # Focus the editor widget when in editor view
+        # Focus the appropriate widget for each view
         if self.state.view == "editor":
             try:
                 editor = self.screen.query_one("#editor")
                 editor.focus()
+            except Exception:
+                pass
+        elif self.state.view in ("outline", "entities"):
+            try:
+                nav = self.screen.query_one("#nav")
+                nav.focus()
             except Exception:
                 pass
 
