@@ -34,7 +34,7 @@ def _resolve_section(cur, selector: str) -> str:
         sys.exit(1)
 
     for sec_id, _ in rows:
-        if sec_id == selector:
+        if str(sec_id) == selector:
             return sec_id
 
     print("Section not found")
@@ -55,7 +55,7 @@ def _resolve_block(cur, selector: str) -> str:
 
     # UUID fallback
     for (block_id,) in rows:
-        if block_id == selector:
+        if str(block_id) == selector:
             return block_id
 
     print("Block not found")

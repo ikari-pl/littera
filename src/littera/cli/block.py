@@ -22,7 +22,7 @@ def _resolve_section(cur, selector: str) -> str:
         sys.exit(1)
 
     for sec_id, _ in rows:
-        if sec_id == selector:
+        if str(sec_id) == selector:
             return sec_id
 
     print("Section not found")

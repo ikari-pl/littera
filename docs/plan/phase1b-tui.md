@@ -40,9 +40,9 @@ Practical proof:
 - When a TUI bug reveals an ambiguous rule, the rule must be decided in Phase 1A (CLI truth), then reflected here.
 - Regressions should become interaction tests before fixes (when feasible).
 
-## Current Status (2026-01-08)
+## Current Status (2026-01-10)
 
-In progress.
+✅ **COMPLETE**
 
 - Done: reducer-style state (`dispatch(Action)`) and explicit view contexts
 - Done: Textual stability hardening:
@@ -50,18 +50,21 @@ In progress.
   - UUID-safe widget ids (prefixed)
   - avoid highlight-triggered rerender loops
 - Done: TUI mention linking aligns with schema `(block_id, entity_id, language)`
-- Tests: `pytest -q tests/tui` passes
-- ✅ All major TUX patterns implemented and tested
+- Done: Formal `reduce(state, action)` function extracted to state.py
+- Done: Computed properties on AppState (edit_session, entity_selection, nav_level, etc.)
+- Done: Bug burn-down complete (UUID selector comparison bug fixed)
+- Tests: `pytest -q tests/tui` passes (25 tests)
+- Tests: Full suite passes (44 tests)
 
 ## Progress Summary
 
 - **Navigation UX (Outline)**: ✅ COMPLETE
-- **Entities UX**: ✅ COMPLETE  
+- **Entities UX**: ✅ COMPLETE
 - **Editing**: ✅ COMPLETE
 - **Mentions**: ✅ COMPLETE
 - **TUI Tests**: ✅ COMPLETE
-
-Ready to proceed with remaining Phase 1B items.
+- **State Machine**: ✅ COMPLETE (formalized reducer pattern)
+- **Bug Burn-Down**: ✅ COMPLETE (no known issues)
 
 ## Checklist
 
@@ -108,8 +111,8 @@ Ready to proceed with remaining Phase 1B items.
 
 ### G. Bug Burn-Down
 
-- [ ] Add a "known issues" list (short-lived, deleted when empty)
-- [ ] Convert regressions into tests before fixing
+- [x] Add a "known issues" list (short-lived, deleted when empty) — None needed; no known issues
+- [x] Convert regressions into tests before fixing — UUID selector bug captured in test_block_create_with_uuid_selector
 
 ## Parallelizable Work
 

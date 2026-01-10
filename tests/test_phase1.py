@@ -97,6 +97,39 @@ def test_block_create_delete_cli(tmp_path: Path) -> None:
     assert "No blocks yet." in out
 
 
+def test_block_create_with_uuid_selector(tmp_path: Path) -> None:
+    """Test that block-create works with UUID string selectors (regression test)."""
+    import re
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    app = typer.Typer()
+    block_manage.register(app)
+    run_cli(app, "littera init .", workdir)
+    run_cli(app, "littera doc-add Doc", workdir)
+    run_cli(app, "littera section-add 1 Sec", workdir)
+
+    # Get the section UUID from section-list --json output
+    out = run_cli(app, "littera section-list 1 --json", workdir)
+    # Parse UUID from output - look for UUID pattern
+    uuid_match = re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", out)
+    if not uuid_match:
+        # Fallback: use psycopg with a fresh connection via open_work_db
+        os.chdir(workdir)
+        with open_work_db() as db:
+            cur = db.conn.cursor()
+            cur.execute("SELECT id FROM sections LIMIT 1")
+            section_uuid = str(cur.fetchone()[0])
+    else:
+        section_uuid = uuid_match.group(0)
+
+    # Create block using UUID selector (not index)
+    out = run_cli(app, f"littera block-create {section_uuid} 'UUID test block' --lang en", workdir)
+
+    out = run_cli(app, "littera block-list 1", workdir)
+    assert "UUID test block" in out
+
+
 def test_undo_redo_flow(tmp_path: Path) -> None:
     from littera.tui.undo import UndoRedo, EditTarget
 
