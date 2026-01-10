@@ -728,6 +728,14 @@ class LitteraApp(App):
         widgets = view.render(self.state)
         await container.mount_all(widgets)
 
+        # Focus the editor widget when in editor view
+        if self.state.view == "editor":
+            try:
+                editor = self.screen.query_one("#editor")
+                editor.focus()
+            except Exception:
+                pass
+
     def _load_cfg(self) -> dict:
         work_dir = Path.cwd()
         littera_dir = work_dir / ".littera"
