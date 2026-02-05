@@ -32,6 +32,13 @@ class EditorView(View):
 
             editor = Input(value=text or "", id="editor")
 
-        hint = "Ctrl+S: save   Esc: cancel"
+        hints = "Ctrl+S:save  Ctrl+Z:undo  Ctrl+Y:redo  Esc:cancel"
 
-        return [Vertical(Static(title), Static(hint), editor, id="editor_layout")]
+        return [
+            Vertical(
+                Static(title, id="breadcrumb"),
+                editor,
+                Static(hints, id="hint-bar"),
+                id="editor_layout",
+            )
+        ]

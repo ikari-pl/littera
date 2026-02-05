@@ -1,8 +1,45 @@
 #nav {
   width: 30%;
-  border: tall $primary;
+  border: solid $primary;
+}
+
+#breadcrumb {
+  dock: top;
+  height: 1;
+  background: $primary-darken-2;
+  color: $text;
+  padding: 0 1;
+}
+
+#hint-bar {
+  dock: bottom;
+  height: 1;
+  background: $surface;
+  color: $text-muted;
+  padding: 0 1;
 }
 
 #detail {
   padding: 1;
+}
+
+ErrorScreen {
+    align: center middle;
+}
+
+#error-dialog {
+    width: 80%;
+    height: auto;
+    border: thick $error;
+    background: $surface;
+    padding: 1 2;
+}
+
+#error-traceback {
+    height: auto;
+    max-height: 20;
+    overflow-y: auto;
+    background: $background;
+    color: $text-muted;
+    margin: 1 0;
 }

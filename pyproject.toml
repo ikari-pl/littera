@@ -26,13 +26,11 @@ disable_error_code = [
 
 [tool.pyright]
 strict = ["type-check", "reportUnusedFunction"]
-reportMissingImports = "error"
 reportMissingTypeStubs = "error"
 reportUnsupportedType = "error"
 reportInconsistentMethodOverride = "error"
 reportIncompatibleVariableOverride = "error"
 reportUntypedFunctionDefinition = "error"
-reportMissingImports = false
 littera = "littera.cli.app:app"
 
 [build-system]

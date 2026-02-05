@@ -1,4 +1,4 @@
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widgets import ListItem, ListView, Static
 
 from littera.tui.state import AppState
@@ -10,7 +10,8 @@ class EntitiesView(View):
 
     def render(self, state: AppState):
         items = []
-        detail = "Select an entity (n: edit note, a: add, o: outline)"
+        detail = "Select an entity"
+        hints = "a:add entity  n:edit note  o:outline  Esc:back"
 
         cur = state.db.cursor()
         cur.execute(
@@ -124,32 +125,16 @@ class EntitiesView(View):
                 detail_lines.append("Mentions:")
                 detail_lines.append("  (none)")
 
-            detail_lines.append("")
-
-            detail_lines.append("Note (work-scoped):")
-            detail_lines.append(note if note else "(no note)")
-            detail_lines.append("")
-
-            if mentions:
-                detail_lines.append("Mentions:")
-                for doc_title, sec_title, lang, text in mentions:
-                    preview = text.replace("\n", " ")[:60]
-                    detail_lines.append(
-                        f"  - {doc_title} / {sec_title} ({lang}) {preview}"
-                    )
-            else:
-                detail_lines.append("Mentions:")
-                detail_lines.append("  (none)")
-
-            detail_lines.append("")
-            detail_lines.append("n: edit note   o: outline")
-
             detail = "\n".join(detail_lines)
 
         return [
-            Horizontal(
-                ListView(*items, id="nav"),
-                Static(detail, id="detail"),
-                id="entities-layout",
+            Vertical(
+                Static("Entities", id="breadcrumb"),
+                Horizontal(
+                    ListView(*items, id="nav"),
+                    Static(detail, id="detail"),
+                    id="entities-layout",
+                ),
+                Static(hints, id="hint-bar"),
             )
         ]
