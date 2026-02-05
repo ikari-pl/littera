@@ -13,7 +13,6 @@ import logging
 import yaml
 
 from textual.app import App, ComposeResult
-from textual.events import Key
 from textual.widgets import Footer, Header, ListView
 from textual.containers import Horizontal
 
@@ -63,7 +62,6 @@ class LitteraApp(App):
         ("ctrl+s", "save", "Save"),
         ("ctrl+z", "undo", "Undo"),
         ("ctrl+y", "redo", "Redo"),
-        ("^p", "palette", "Command Palette"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -283,7 +281,10 @@ class LitteraApp(App):
             "INSERT INTO entities (entity_type, canonical_label) VALUES (%s, %s) RETURNING id",
             (entity_type, name),
         )
-        entity_id = str(cur.fetchone()[0])
+        row = cur.fetchone()
+        if row is None:
+            return
+        entity_id = str(row[0])
         self.state.db.commit()
 
         self.state.dispatch(EntitiesSelect(entity_id))
@@ -356,18 +357,24 @@ class LitteraApp(App):
         if sel.kind not in ("document", "section") or not sel.id:
             return
 
+        _TABLE_MAP = {"document": "documents", "section": "sections"}
+        table = _TABLE_MAP[sel.kind]
+
         cur = self.state.db.cursor()
-        table = "documents" if sel.kind == "document" else "sections"
-        cur.execute(f"SELECT title FROM {table} WHERE id = %s", (sel.id,))
+        if sel.kind == "document":
+            cur.execute("SELECT title FROM documents WHERE id = %s", (sel.id,))
+        else:
+            cur.execute("SELECT title FROM sections WHERE id = %s", (sel.id,))
         row = cur.fetchone()
         current_title = row[0] if row and row[0] else ""
 
         kind_label = sel.kind.title()
+        item_id = sel.id
 
         async def on_title_result(title: str | None) -> None:
             if title is None:
                 return
-            self._update_title(table, title, sel.id)
+            self._update_title(table, title, item_id)
 
         self.push_screen(
             InputDialog(f"Edit {kind_label}", "New title:", current_title),
@@ -378,11 +385,14 @@ class LitteraApp(App):
     def _update_title(self, table: str, title: str, item_id: str) -> None:
         if self.state is None:
             return
+        _ALLOWED_TABLES = {"documents", "sections"}
+        if table not in _ALLOWED_TABLES:
+            return
         cur = self.state.db.cursor()
-        cur.execute(
-            f"UPDATE {table} SET title = %s WHERE id = %s",
-            (title, item_id),
-        )
+        if table == "documents":
+            cur.execute("UPDATE documents SET title = %s WHERE id = %s", (title, item_id))
+        else:
+            cur.execute("UPDATE sections SET title = %s WHERE id = %s", (title, item_id))
         self.state.db.commit()
         self._render_view()
 
@@ -398,21 +408,22 @@ class LitteraApp(App):
         if not sel.id:
             return
 
-        table_map = {
+        _TABLE_MAP = {
             "document": "documents",
             "section": "sections",
             "block": "blocks",
         }
-        table = table_map.get(sel.kind)
+        table = _TABLE_MAP.get(sel.kind)
         if not table:
             return
 
         kind_label = sel.kind.title()
+        item_id = sel.id
 
         async def on_confirm(confirmed: bool) -> None:
             if not confirmed:
                 return
-            self._perform_delete(table, sel.id)
+            self._perform_delete(table, item_id)
 
         self.push_screen(
             ConfirmDialog(f"Delete {kind_label}?", "This cannot be undone."),
@@ -423,8 +434,16 @@ class LitteraApp(App):
     def _perform_delete(self, table: str, item_id: str) -> None:
         if self.state is None:
             return
+        _ALLOWED_TABLES = {"documents", "sections", "blocks"}
+        if table not in _ALLOWED_TABLES:
+            return
         cur = self.state.db.cursor()
-        cur.execute(f"DELETE FROM {table} WHERE id = %s", (item_id,))
+        if table == "documents":
+            cur.execute("DELETE FROM documents WHERE id = %s", (item_id,))
+        elif table == "sections":
+            cur.execute("DELETE FROM sections WHERE id = %s", (item_id,))
+        else:
+            cur.execute("DELETE FROM blocks WHERE id = %s", (item_id,))
         self.state.db.commit()
         self.state.dispatch(ClearSelection())
         self._render_view()
@@ -439,10 +458,12 @@ class LitteraApp(App):
         if not sel or sel.kind != "block" or not sel.id:
             return
 
+        block_id = sel.id  # capture by value, not reference
+
         async def on_name_result(name: str | None) -> None:
             if not name:
                 return
-            self._perform_link(sel.id, name)
+            self._perform_link(block_id, name)
 
         self.push_screen(
             InputDialog("Link to Entity", "Entity Name:", ""), on_name_result
@@ -461,21 +482,24 @@ class LitteraApp(App):
         row = cur.fetchone()
 
         if row:
-            entity_id = row[0]
+            entity_id = str(row[0])
         else:
             # Auto-create
             cur.execute(
                 "INSERT INTO entities (entity_type, canonical_label) VALUES ('concept', %s) RETURNING id",
                 (entity_name,),
             )
-            entity_id = str(cur.fetchone()[0])
+            new_row = cur.fetchone()
+            if new_row is None:
+                return
+            entity_id = str(new_row[0])
 
         # Link (mentions require language per schema)
         cur.execute("SELECT language FROM blocks WHERE id = %s", (block_id,))
-        row = cur.fetchone()
-        if row is None:
+        lang_row = cur.fetchone()
+        if lang_row is None:
             return
-        (language,) = row
+        language = lang_row[0]
 
         cur.execute(
             "SELECT 1 FROM mentions WHERE block_id = %s AND entity_id = %s AND language = %s",
@@ -884,20 +908,6 @@ class LitteraApp(App):
             return
 
         self._render_view()
-
-    def on_key(self, event: Key) -> None:
-        if event.key == "escape":
-            self.action_back()
-        elif event.key == "^p":
-            self.action_show_palette()
-
-    @safe_action
-    def action_show_palette(self) -> None:
-        if self.state is None:
-            return
-        self.app.bell()
-        self.app.exit()
-
 
 if __name__ == "__main__":
     LitteraApp().run()

@@ -23,15 +23,20 @@ def register(app):
 
                 cur = db.conn.cursor()
 
-                def count(table: str) -> int:
-                    cur.execute(f"SELECT COUNT(*) FROM {table}")
-                    return cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM documents")
+                doc_count = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM sections")
+                sec_count = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM blocks")
+                blk_count = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM entities")
+                ent_count = cur.fetchone()[0]
 
                 print("\nContent:")
-                print(f"  • Documents: {count('documents')}")
-                print(f"  • Sections:  {count('sections')}")
-                print(f"  • Blocks:    {count('blocks')}")
-                print(f"  • Entities:  {count('entities')}")
+                print(f"  • Documents: {doc_count}")
+                print(f"  • Sections:  {sec_count}")
+                print(f"  • Blocks:    {blk_count}")
+                print(f"  • Entities:  {ent_count}")
         except RuntimeError as e:
             print(str(e))
             sys.exit(1)

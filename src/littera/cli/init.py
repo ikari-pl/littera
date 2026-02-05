@@ -90,7 +90,13 @@ def register(app):
                 (pg_cfg.db_name,),
             )
             if cur.fetchone() is None:
-                cur.execute(f'CREATE DATABASE "{pg_cfg.db_name}"')
+                from psycopg import sql
+
+                cur.execute(
+                    sql.SQL("CREATE DATABASE {}").format(
+                        sql.Identifier(pg_cfg.db_name)
+                    )
+                )
         admin_conn.close()
 
         # Apply schema

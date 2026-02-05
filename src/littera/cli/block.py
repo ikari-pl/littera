@@ -1,4 +1,11 @@
-"""Block commands: littera block add|list|edit|delete"""
+"""Block commands: littera block add|list|edit|delete
+
+Section resolution: section selectors are scoped to a document when a
+document context is available.  For `add` and `list`, the caller provides
+an explicit section selector.  For `edit` and `delete`, blocks are resolved
+globally (UUIDs are unique) but index-based resolution uses the section
+that owns the block.
+"""
 
 import os
 import sys
@@ -9,45 +16,91 @@ import typer
 from littera.db.workdb import open_work_db
 
 
-def _resolve_section(cur, selector: str) -> tuple[str, str]:
-    """Resolve section selector to (id, title)."""
-    cur.execute("SELECT id, title FROM sections ORDER BY order_index")
+def _resolve_section_global(cur, selector: str) -> tuple[str, str]:
+    """Resolve a section selector across all documents.
+
+    Accepts: 1-based index (global order), UUID, or exact title.
+    Warns if multiple sections share the same title.
+    """
+    cur.execute(
+        """
+        SELECT s.id, s.title, d.title
+        FROM sections s
+        JOIN documents d ON d.id = s.document_id
+        ORDER BY d.created_at, s.order_index
+        """
+    )
     rows = cur.fetchall()
 
     if selector.isdigit():
         idx = int(selector)
         if 1 <= idx <= len(rows):
-            return rows[idx - 1]
-        print(f"Invalid section index: {selector}")
+            sec_id, sec_title, doc_title = rows[idx - 1]
+            return sec_id, sec_title
+        print(f"Invalid section index: {selector} (have {len(rows)} sections)")
         sys.exit(1)
 
     # Try UUID match
-    for sec_id, title in rows:
+    for sec_id, sec_title, doc_title in rows:
         if str(sec_id) == selector:
-            return sec_id, title
+            return sec_id, sec_title
 
     # Try title match
-    matches = [(sid, t) for sid, t in rows if t == selector]
+    matches = [(sid, st) for sid, st, dt in rows if st == selector]
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
-        print(f"Ambiguous section title: {selector}")
+        print(f"Ambiguous section title: '{selector}' matches {len(matches)} sections across documents")
+        print("Use a UUID or index to disambiguate.")
         sys.exit(1)
 
     print(f"Section not found: {selector}")
     sys.exit(1)
 
 
-def _resolve_block(cur, selector: str) -> tuple[str, str, str]:
-    """Resolve block selector to (id, language, text)."""
-    cur.execute("SELECT id, language, source_text FROM blocks ORDER BY created_at")
+def _resolve_block_in_section(cur, section_id: str, selector: str) -> tuple[str, str, str]:
+    """Resolve a block selector scoped to a specific section."""
+    cur.execute(
+        "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+        (section_id,),
+    )
     rows = cur.fetchall()
 
     if selector.isdigit():
         idx = int(selector)
         if 1 <= idx <= len(rows):
             return rows[idx - 1]
-        print(f"Invalid block index: {selector}")
+        print(f"Invalid block index: {selector} (section has {len(rows)} blocks)")
+        sys.exit(1)
+
+    # Try UUID match
+    for block_id, lang, text in rows:
+        if str(block_id) == selector:
+            return block_id, lang, text
+
+    print(f"Block not found in section: {selector}")
+    sys.exit(1)
+
+
+def _resolve_block_global(cur, selector: str) -> tuple[str, str, str]:
+    """Resolve a block by UUID only (global, for edit/delete)."""
+    # Index-based: resolve across all blocks (ordered by document/section/creation)
+    cur.execute(
+        """
+        SELECT b.id, b.language, b.source_text
+        FROM blocks b
+        JOIN sections s ON s.id = b.section_id
+        JOIN documents d ON d.id = s.document_id
+        ORDER BY d.created_at, s.order_index, b.created_at
+        """
+    )
+    rows = cur.fetchall()
+
+    if selector.isdigit():
+        idx = int(selector)
+        if 1 <= idx <= len(rows):
+            return rows[idx - 1]
+        print(f"Invalid block index: {selector} (have {len(rows)} blocks total)")
         sys.exit(1)
 
     # Try UUID match
@@ -70,7 +123,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                sec_id, _ = _resolve_section(cur, section)
+                sec_id, _ = _resolve_section_global(cur, section)
 
                 block_id = str(uuid.uuid4())
                 cur.execute(
@@ -93,7 +146,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                sec_id, sec_title = _resolve_section(cur, section)
+                sec_id, sec_title = _resolve_section_global(cur, section)
                 cur.execute(
                     "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
                     (sec_id,),
@@ -118,7 +171,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                block_id, lang, text = _resolve_block(cur, block)
+                block_id, lang, text = _resolve_block_global(cur, block)
 
                 # Use $EDITOR or fallback to stdin
                 editor_cmd = os.environ.get("EDITOR")
@@ -160,10 +213,9 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                block_id, lang, text = _resolve_block(cur, block)
+                block_id, lang, text = _resolve_block_global(cur, block)
 
-                # Delete associated mentions first
-                cur.execute("DELETE FROM mentions WHERE block_id = %s", (block_id,))
+                # CASCADE in schema handles mentions, but explicit delete is clearer
                 cur.execute("DELETE FROM blocks WHERE id = %s", (block_id,))
                 db.conn.commit()
 
