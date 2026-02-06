@@ -28,12 +28,12 @@ MACOS_BINARIES = {
     # Apple Silicon
     "arm64": {
         "url": "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/18.1.0/embedded-postgres-binaries-darwin-arm64v8-18.1.0.jar",
-        "sha1": "5941b043f17fe3deca920763efd2fc38ed2f0efa",
+        "sha256": "7398c6c19d11594a944dc0ddc79fdbb611164312e1f509a8c86b09724027401e",
     },
     # Intel
     "x86_64": {
         "url": "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-amd64/18.1.0/embedded-postgres-binaries-darwin-amd64-18.1.0.jar",
-        "sha1": "ade1f82936188b591844e9bc5bcfc22443b0d71f",
+        "sha256": "3b4f16dcf57250d8f9c5e9270a7dfc3921b66d66534d00f8f366e8263e862d11",
     },
 }
 
@@ -129,7 +129,7 @@ class EmbeddedPostgresManager:
 
         binary_info = MACOS_BINARIES[arch]
         url = binary_info["url"]
-        expected_sha1 = binary_info["sha1"]
+        expected_sha256 = binary_info["sha256"]
 
         archive_path = pg_dir / "postgres.jar"
 
@@ -137,12 +137,12 @@ class EmbeddedPostgresManager:
             shutil.copyfileobj(resp, out)
 
         # Verify download integrity
-        actual_sha1 = hashlib.sha1(archive_path.read_bytes()).hexdigest()
-        if actual_sha1 != expected_sha1:
+        actual_sha256 = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+        if actual_sha256 != expected_sha256:
             archive_path.unlink()
             raise EmbeddedPostgresError(
                 f"Checksum mismatch for {url}: "
-                f"expected {expected_sha1}, got {actual_sha1}"
+                f"expected {expected_sha256}, got {actual_sha256}"
             )
 
         # 1. Extract JAR (ZIP)
