@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
 import platform
 import shutil
 import tarfile
@@ -25,9 +26,15 @@ POSTGRES_VERSION = "18.1.0"
 # GroupId: io.zonky.test.postgres
 MACOS_BINARIES = {
     # Apple Silicon
-    "arm64": "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/18.1.0/embedded-postgres-binaries-darwin-arm64v8-18.1.0.jar",
+    "arm64": {
+        "url": "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/18.1.0/embedded-postgres-binaries-darwin-arm64v8-18.1.0.jar",
+        "sha1": "5941b043f17fe3deca920763efd2fc38ed2f0efa",
+    },
     # Intel
-    "x86_64": "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-amd64/18.1.0/embedded-postgres-binaries-darwin-amd64-18.1.0.jar",
+    "x86_64": {
+        "url": "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-amd64/18.1.0/embedded-postgres-binaries-darwin-amd64-18.1.0.jar",
+        "sha1": "ade1f82936188b591844e9bc5bcfc22443b0d71f",
+    },
 }
 
 
@@ -120,12 +127,23 @@ class EmbeddedPostgresManager:
         if arch not in MACOS_BINARIES:
             raise EmbeddedPostgresError(f"Unsupported architecture: {arch}")
 
-        url = MACOS_BINARIES[arch]
+        binary_info = MACOS_BINARIES[arch]
+        url = binary_info["url"]
+        expected_sha1 = binary_info["sha1"]
 
         archive_path = pg_dir / "postgres.jar"
 
         with urllib.request.urlopen(url) as resp, archive_path.open("wb") as out:
             shutil.copyfileobj(resp, out)
+
+        # Verify download integrity
+        actual_sha1 = hashlib.sha1(archive_path.read_bytes()).hexdigest()
+        if actual_sha1 != expected_sha1:
+            archive_path.unlink()
+            raise EmbeddedPostgresError(
+                f"Checksum mismatch for {url}: "
+                f"expected {expected_sha1}, got {actual_sha1}"
+            )
 
         # 1. Extract JAR (ZIP)
         with zipfile.ZipFile(archive_path) as zf:

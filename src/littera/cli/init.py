@@ -99,15 +99,14 @@ def register(app):
                 )
         admin_conn.close()
 
-        # Apply schema
+        # Apply schema via migration system
         conn = psycopg.connect(
             dbname=pg_cfg.db_name,
             port=pg_cfg.port,
         )
-        schema_path = Path(__file__).parents[3] / "db" / "schema.sql"
-        with schema_path.open() as f:
-            conn.execute(f.read())
-        conn.commit()
+        from littera.db.migrate import migrate
+
+        migrate(conn)
 
         # Ensure Work row exists
         with conn.cursor() as cur:

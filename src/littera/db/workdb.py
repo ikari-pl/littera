@@ -140,6 +140,12 @@ def open_work_db(work_dir: Path | None = None) -> Iterator[WorkDb]:
         _spawn_lease_watcher(littera_dir)
 
     conn = psycopg.connect(dbname=pg_cfg.db_name, port=pg_cfg.port)
+
+    # Apply any pending schema migrations
+    from littera.db.migrate import migrate
+
+    migrate(conn)
+
     try:
         yield WorkDb(
             work_dir=work_dir,
