@@ -10,7 +10,7 @@ Policy layer:
 from pathlib import Path
 import yaml
 
-from littera.db.bootstrap import PostgresConfig, bootstrap
+from littera.db.bootstrap import PostgresConfig, bootstrap, ensure_database
 
 
 def register(app):
@@ -79,25 +79,7 @@ def register(app):
         bootstrap(pg_cfg)
 
         # Ensure application database exists
-        admin_conn = psycopg.connect(
-            dbname=pg_cfg.admin_db,  # usually 'postgres'
-            port=pg_cfg.port,
-        )
-        admin_conn.autocommit = True
-        with admin_conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s",
-                (pg_cfg.db_name,),
-            )
-            if cur.fetchone() is None:
-                from psycopg import sql
-
-                cur.execute(
-                    sql.SQL("CREATE DATABASE {}").format(
-                        sql.Identifier(pg_cfg.db_name)
-                    )
-                )
-        admin_conn.close()
+        ensure_database(pg_cfg)
 
         # Apply schema via migration system
         conn = psycopg.connect(

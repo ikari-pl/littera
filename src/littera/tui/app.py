@@ -38,11 +38,19 @@ from littera.tui.state import (
 from littera.tui.views.entities import EntitiesView
 from littera.tui.views.editor import EditorView
 from littera.tui.views.outline import OutlineView
-from littera.tui.views.input_dialog import InputDialog, ConfirmDialog
+from littera.tui.views.input_dialog import InputDialog, ConfirmDialog, RecoveryDialog
 from littera.tui.decorators import safe_action
 from littera.tui import queries, actions
 
-from littera.db.bootstrap import start_postgres
+from littera.db.bootstrap import (
+    start_postgres,
+    stop_postgres,
+    WalCorruptionError,
+    find_pg_resetwal,
+    reset_wal,
+    reinit_cluster,
+    ensure_database,
+)
 from littera.db.workdb import postgres_config_from_work
 from littera.db.embedded_pg import EmbeddedPostgresManager
 
@@ -71,6 +79,7 @@ class LitteraApp(App):
         self.views = {}
         self._pg_cfg = None
         self._pg_started_here = False
+        self._work_cfg: dict = {}
         self._suppress_editor_change_events = False
 
     def compose(self) -> ComposeResult:
@@ -89,15 +98,25 @@ class LitteraApp(App):
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
 
-        cfg = self._load_cfg()
-
-        import psycopg
+        self._work_cfg = self._load_cfg()
 
         EmbeddedPostgresManager(littera_dir).ensure()
 
-        pg_cfg = postgres_config_from_work(littera_dir, cfg)
+        pg_cfg = postgres_config_from_work(littera_dir, self._work_cfg)
         self._pg_cfg = pg_cfg
-        self._pg_started_here = start_postgres(pg_cfg)
+
+        try:
+            self._pg_started_here = start_postgres(pg_cfg)
+        except WalCorruptionError as e:
+            can_recover = find_pg_resetwal(pg_cfg) is not None
+            self._handle_wal_corruption(pg_cfg, e, can_recover)
+            return
+
+        self._finish_init(pg_cfg, self._work_cfg)
+
+    def _finish_init(self, pg_cfg, cfg: dict) -> None:
+        """Complete TUI initialization after PG is running."""
+        import psycopg
 
         conn = psycopg.connect(dbname=pg_cfg.db_name, port=pg_cfg.port)
 
@@ -109,6 +128,57 @@ class LitteraApp(App):
         }
         self._render_view()
 
+    def _handle_wal_corruption(
+        self, pg_cfg, error: WalCorruptionError, can_recover: bool
+    ) -> None:
+        """Show recovery dialog and act on user's choice."""
+        message = (
+            f"{error}\n\n"
+            "Recent log output:\n"
+            f"{error.log_tail}"
+        )
+
+        def on_choice(choice: str) -> None:
+            if choice == "recover":
+                self._attempt_wal_recovery(pg_cfg)
+            elif choice == "reinit":
+                self._attempt_reinit(pg_cfg)
+            else:
+                self.exit()
+
+        self.push_screen(RecoveryDialog(message, can_recover), on_choice)
+
+    def _attempt_wal_recovery(self, pg_cfg) -> None:
+        """Run pg_resetwal, restart PG, and continue init."""
+        try:
+            reset_wal(pg_cfg)
+            self._pg_started_here = start_postgres(pg_cfg)
+            self._finish_init(pg_cfg, self._work_cfg)
+        except Exception as e:
+            logging.exception("WAL recovery failed")
+            self.notify(f"Recovery failed: {e}", severity="error")
+            self.exit()
+
+    def _attempt_reinit(self, pg_cfg) -> None:
+        """Delete pgdata, reinit, recreate DB + schema, continue init."""
+        try:
+            reinit_cluster(pg_cfg)
+            self._pg_started_here = start_postgres(pg_cfg)
+            ensure_database(pg_cfg)
+
+            from littera.db.migrate import migrate
+            import psycopg
+
+            conn = psycopg.connect(dbname=pg_cfg.db_name, port=pg_cfg.port)
+            migrate(conn)
+            conn.close()
+
+            self._finish_init(pg_cfg, self._work_cfg)
+        except Exception as e:
+            logging.exception("Re-initialization failed")
+            self.notify(f"Re-initialization failed: {e}", severity="error")
+            self.exit()
+
     def on_unmount(self) -> None:
         if self.state is not None:
             self.state.db.close()
@@ -117,8 +187,6 @@ class LitteraApp(App):
             getattr(self, "_pg_started_here", False)
             and getattr(self, "_pg_cfg", None) is not None
         ):
-            from littera.db.bootstrap import stop_postgres
-
             stop_postgres(self._pg_cfg)
 
     # =====================
