@@ -44,7 +44,7 @@ def _resolve_entity(cur, entity_type: str, name: str) -> str:
 
 def _resolve_mention(cur, selector: str) -> tuple[str, str, str]:
     """Resolve mention selector to (id, block_id, entity_id)."""
-    cur.execute("SELECT id, block_id, entity_id FROM mentions ORDER BY created_at")
+    cur.execute("SELECT id, block_id, entity_id FROM mentions ORDER BY id")
     rows = cur.fetchall()
 
     if selector.isdigit():
@@ -98,7 +98,7 @@ def register(app: typer.Typer):
                     FROM mentions m
                     JOIN blocks b ON m.block_id = b.id
                     JOIN entities e ON m.entity_id = e.id
-                    ORDER BY m.created_at
+                    ORDER BY b.created_at
                     """
                 )
                 rows = cur.fetchall()

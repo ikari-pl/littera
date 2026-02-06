@@ -131,16 +131,12 @@ def register(app: typer.Typer):
                 doc_id, _ = _resolve_document(cur, document)
                 sec_id, sec_title = _resolve_section(cur, doc_id, section)
 
-                # Check for blocks
+                # Count dependents before cascade
                 cur.execute(
                     "SELECT COUNT(*) FROM blocks WHERE section_id = %s",
                     (sec_id,),
                 )
-                block_count = cur.fetchone()[0]
-                if block_count > 0:
-                    print(f"Cannot delete: section has {block_count} block(s)")
-                    print("Delete blocks first, or use --force (not implemented)")
-                    sys.exit(1)
+                blk_count = cur.fetchone()[0]
 
                 cur.execute("DELETE FROM sections WHERE id = %s", (sec_id,))
                 db.conn.commit()
@@ -149,4 +145,5 @@ def register(app: typer.Typer):
             print(str(e))
             sys.exit(1)
 
-        print(f"✓ Section deleted: {sec_title}")
+        suffix = f" (cascaded: {blk_count} block(s))" if blk_count else ""
+        print(f"✓ Section deleted: {sec_title}{suffix}")

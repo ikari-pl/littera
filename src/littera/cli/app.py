@@ -58,6 +58,7 @@ from littera.cli import section as section_cmd
 from littera.cli import block as block_cmd
 from littera.cli import entity as entity_cmd
 from littera.cli import entity_note as entity_note_cmd
+from littera.cli import entity_label as entity_label_cmd
 from littera.cli import mention as mention_cmd
 
 doc_cmd.register(doc_app)
@@ -65,6 +66,7 @@ section_cmd.register(section_app)
 block_cmd.register(block_app)
 entity_cmd.register(entity_app)
 entity_note_cmd.register(entity_app)  # adds note-set and note-show to entity subgroup
+entity_label_cmd.register(entity_app)  # adds label-add, label-list, label-delete
 mention_cmd.register(mention_app)
 
 

@@ -96,16 +96,19 @@ def register(app: typer.Typer):
                             print(f"Document not found: {selector}")
                             sys.exit(1)
 
-                # Check for sections
+                # Count dependents before cascade
                 cur.execute(
                     "SELECT COUNT(*) FROM sections WHERE document_id = %s",
                     (doc_id,),
                 )
-                section_count = cur.fetchone()[0]
-                if section_count > 0:
-                    print(f"Cannot delete: document has {section_count} section(s)")
-                    print("Delete sections first, or use --force (not implemented)")
-                    sys.exit(1)
+                sec_count = cur.fetchone()[0]
+                cur.execute(
+                    "SELECT COUNT(*) FROM blocks b "
+                    "JOIN sections s ON s.id = b.section_id "
+                    "WHERE s.document_id = %s",
+                    (doc_id,),
+                )
+                blk_count = cur.fetchone()[0]
 
                 cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
                 db.conn.commit()
@@ -114,4 +117,10 @@ def register(app: typer.Typer):
             print(str(e))
             sys.exit(1)
 
-        print(f"✓ Document deleted: {doc_title}")
+        cascade = []
+        if sec_count:
+            cascade.append(f"{sec_count} section(s)")
+        if blk_count:
+            cascade.append(f"{blk_count} block(s)")
+        suffix = f" (cascaded: {', '.join(cascade)})" if cascade else ""
+        print(f"✓ Document deleted: {doc_title}{suffix}")

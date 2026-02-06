@@ -88,16 +88,17 @@ def register(app: typer.Typer):
                 cur = db.conn.cursor()
                 eid, etype, label = _resolve_entity(cur, selector)
 
-                # Check for mentions
+                # Count dependents before cascade
                 cur.execute(
                     "SELECT COUNT(*) FROM mentions WHERE entity_id = %s",
                     (eid,),
                 )
                 mention_count = cur.fetchone()[0]
-                if mention_count > 0:
-                    print(f"Cannot delete: entity has {mention_count} mention(s)")
-                    print("Delete mentions first, or use --force (not implemented)")
-                    sys.exit(1)
+                cur.execute(
+                    "SELECT COUNT(*) FROM entity_labels WHERE entity_id = %s",
+                    (eid,),
+                )
+                label_count = cur.fetchone()[0]
 
                 cur.execute("DELETE FROM entities WHERE id = %s", (eid,))
                 db.conn.commit()
@@ -106,4 +107,10 @@ def register(app: typer.Typer):
             print(str(e))
             sys.exit(1)
 
-        print(f"✓ Entity deleted: {etype} {label}")
+        cascade = []
+        if mention_count:
+            cascade.append(f"{mention_count} mention(s)")
+        if label_count:
+            cascade.append(f"{label_count} label(s)")
+        suffix = f" (cascaded: {', '.join(cascade)})" if cascade else ""
+        print(f"✓ Entity deleted: {etype} {label}{suffix}")

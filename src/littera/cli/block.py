@@ -215,7 +215,13 @@ def register(app: typer.Typer):
                 cur = db.conn.cursor()
                 block_id, lang, text = _resolve_block_global(cur, block)
 
-                # CASCADE in schema handles mentions, but explicit delete is clearer
+                # Count dependents before cascade
+                cur.execute(
+                    "SELECT COUNT(*) FROM mentions WHERE block_id = %s",
+                    (block_id,),
+                )
+                mention_count = cur.fetchone()[0]
+
                 cur.execute("DELETE FROM blocks WHERE id = %s", (block_id,))
                 db.conn.commit()
 
@@ -224,4 +230,5 @@ def register(app: typer.Typer):
             sys.exit(1)
 
         preview = text.replace("\n", " ")[:40]
-        print(f"✓ Block deleted: ({lang}) {preview}...")
+        suffix = f" (cascaded: {mention_count} mention(s))" if mention_count else ""
+        print(f"✓ Block deleted: ({lang}) {preview}...{suffix}")
