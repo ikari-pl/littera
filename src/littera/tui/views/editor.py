@@ -27,7 +27,7 @@ class EditorView(View):
             from textual.widgets import TextArea
 
             editor = TextArea(text or "", id="editor")
-        except Exception:
+        except ImportError:
             from textual.widgets import Input
 
             editor = Input(value=text or "", id="editor")

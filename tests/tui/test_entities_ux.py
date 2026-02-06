@@ -6,6 +6,7 @@ Verifies entities list, detail, and navigation against real Postgres.
 
 from littera.tui.state import EntitiesSelect, GotoEntities
 from littera.tui.views.entities import EntitiesView
+from littera.tui.queries import refresh_entities
 
 
 class TestEntitiesUX:
@@ -16,6 +17,7 @@ class TestEntitiesUX:
         tui_state.dispatch(GotoEntities())
 
         entities_view = EntitiesView()
+        refresh_entities(tui_state)
         result = entities_view.render(tui_state)
         assert len(result) == 1
 
@@ -24,6 +26,7 @@ class TestEntitiesUX:
         tui_state.dispatch(GotoEntities())
 
         entities_view = EntitiesView()
+        refresh_entities(tui_state)
         result = entities_view.render(tui_state)
         assert len(result) == 1
 
@@ -33,6 +36,7 @@ class TestEntitiesUX:
         assert tui_state.entities.selection.kind is None
 
         entities_view = EntitiesView()
+        refresh_entities(tui_state)
         result = entities_view.render(tui_state)
         assert len(result) == 1
 

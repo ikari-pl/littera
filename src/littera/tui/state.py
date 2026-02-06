@@ -56,6 +56,27 @@ class EditSession:
 
 
 # =============================================================================
+# View Data (populated by queries.py, consumed by views)
+# =============================================================================
+
+@dataclass(frozen=True)
+class OutlineItem:
+    """A single item in the outline list (document, section, or block)."""
+    id: str
+    kind: str  # "document", "section", "block"
+    title: str
+    language: str = ""  # Only for blocks
+
+
+@dataclass(frozen=True)
+class EntityItem:
+    """A single entity in the entities list."""
+    id: str
+    entity_type: str
+    label: str
+
+
+# =============================================================================
 # View States
 # =============================================================================
 
@@ -64,12 +85,16 @@ class OutlineState:
     """State for outline navigation (documents -> sections -> blocks)."""
     path: list[PathElement] = field(default_factory=list)
     selection: Selection = field(default_factory=Selection)
+    items: list[OutlineItem] = field(default_factory=list)
+    detail: str = ""
 
 
 @dataclass
 class EntitiesState:
     """State for entities view."""
     selection: Selection = field(default_factory=Selection)
+    items: list[EntityItem] = field(default_factory=list)
+    detail: str = ""
 
 
 @dataclass

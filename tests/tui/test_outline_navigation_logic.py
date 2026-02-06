@@ -12,6 +12,7 @@ from littera.tui.state import (
     OutlineSelect,
     OutlineClearSelection,
 )
+from littera.tui.queries import refresh_outline
 
 
 class TestOutlineNavigation:
@@ -44,6 +45,7 @@ class TestOutlineNavigation:
         from littera.tui.views.outline import OutlineView
 
         view = OutlineView()
+        refresh_outline(tui_state)
         result = view.render(tui_state)
 
         # At root level, should return layout with documents listed
@@ -62,6 +64,7 @@ class TestRightPaneDetail:
         )
 
         view = OutlineView()
+        refresh_outline(tui_state)
         result = view.render(tui_state)
         assert len(result) == 1
 
@@ -83,6 +86,7 @@ class TestRightPaneDetail:
         )
 
         view = OutlineView()
+        refresh_outline(tui_state)
         result = view.render(tui_state)
         assert len(result) == 1
 
@@ -113,6 +117,7 @@ class TestRightPaneDetail:
         )
 
         view = OutlineView()
+        refresh_outline(tui_state)
         result = view.render(tui_state)
         assert len(result) == 1
 
@@ -121,6 +126,7 @@ class TestRightPaneDetail:
         from littera.tui.views.outline import OutlineView
 
         view = OutlineView()
+        refresh_outline(tui_state)
         result = view.render(tui_state)
         assert len(result) == 1
 

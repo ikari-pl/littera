@@ -8,6 +8,7 @@ from littera.tui.state import OutlineSelect, GotoOutline
 from littera.tui.state import EntitiesSelect, GotoEntities
 from littera.tui.views.outline import OutlineView
 from littera.tui.views.entities import EntitiesView
+from littera.tui.queries import refresh_outline, refresh_entities
 
 
 class TestOutlineEntitiesNavigation:
@@ -51,10 +52,12 @@ class TestOutlineEntitiesNavigation:
         """Both views should render without crashing regardless of selection state."""
         tui_state.dispatch(GotoOutline())
         outline_view = OutlineView()
+        refresh_outline(tui_state)
         outline_result = outline_view.render(tui_state)
         assert len(outline_result) == 1
 
         tui_state.dispatch(GotoEntities())
         entities_view = EntitiesView()
+        refresh_entities(tui_state)
         entities_result = entities_view.render(tui_state)
         assert len(entities_result) == 1

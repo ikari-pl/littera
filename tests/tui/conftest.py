@@ -1,6 +1,10 @@
 """Shared fixtures for TUI tests with real embedded Postgres.
 
 Per MANIFESTO: no mocks for core behavior. Views query a real database.
+
+Note: Views are now pure functions of state (no DB access in render()).
+Tests must call queries.refresh_outline() or queries.refresh_entities()
+before view.render() to populate state with DB data.
 """
 
 import os

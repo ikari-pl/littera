@@ -1,8 +1,10 @@
-"""Littera TUI application with refactored state architecture.
+"""Littera TUI application with Elm-inspired architecture.
 
 - Clean path-based navigation (work -> document -> section -> block)
 - Isolated edit_session for editing overlay
 - Unified selection model
+- Views are pure functions of state (no DB queries)
+- DB reads in queries.py, DB writes in actions.py
 """
 
 from __future__ import annotations
@@ -20,9 +22,7 @@ from textual.containers import Horizontal
 from littera.tui.state import (
     AppState,
     PathElement,
-    Selection,
     EditTarget,
-    EditSession,
     GotoOutline,
     GotoEntities,
     ExitEditor,
@@ -35,12 +35,12 @@ from littera.tui.state import (
     StartEdit,
 )
 
-
 from littera.tui.views.entities import EntitiesView
 from littera.tui.views.editor import EditorView
 from littera.tui.views.outline import OutlineView
 from littera.tui.views.input_dialog import InputDialog, ConfirmDialog
 from littera.tui.decorators import safe_action
+from littera.tui import queries, actions
 
 from littera.db.bootstrap import start_postgres
 from littera.db.workdb import postgres_config_from_work
@@ -157,23 +157,10 @@ class LitteraApp(App):
 
         sel = self.state.entity_selection
 
-        if sel.kind == "document":
-            with self.state.db.cursor() as cur:
-                cur.execute("SELECT title FROM documents WHERE id = %s", (sel.id,))
-                row = cur.fetchone()
-            title = row[0] if row else "Untitled"
+        if sel.kind in ("document", "section"):
+            title = queries.fetch_item_title(self.state.db, sel.kind, sel.id)
             self.state.dispatch(
-                OutlinePush(PathElement(kind="document", id=sel.id, title=title))
-            )
-            self._render_view()
-
-        elif sel.kind == "section":
-            with self.state.db.cursor() as cur:
-                cur.execute("SELECT title FROM sections WHERE id = %s", (sel.id,))
-                row = cur.fetchone()
-            title = row[0] if row else "Untitled"
-            self.state.dispatch(
-                OutlinePush(PathElement(kind="section", id=sel.id, title=title))
+                OutlinePush(PathElement(kind=sel.kind, id=sel.id, title=title))
             )
             self._render_view()
 
@@ -212,7 +199,6 @@ class LitteraApp(App):
         if self.state is None:
             return
 
-        # Handle Entities View
         if self.state.view == "entities":
             self._prompt_add_entity()
             return
@@ -220,9 +206,6 @@ class LitteraApp(App):
         if self.state.view != "outline":
             return
 
-        import uuid
-
-        cur = self.state.db.cursor()
         nav_level = self.state.nav_level
 
         if nav_level == "documents":
@@ -277,18 +260,9 @@ class LitteraApp(App):
     def _create_entity(self, entity_type: str, name: str) -> None:
         if self.state is None:
             return
-
-        with self.state.db.cursor() as cur:
-            cur.execute(
-                "INSERT INTO entities (entity_type, canonical_label) VALUES (%s, %s) RETURNING id",
-                (entity_type, name),
-            )
-            row = cur.fetchone()
-        if row is None:
+        entity_id = actions.create_entity(self.state.db, entity_type, name)
+        if entity_id is None:
             return
-        entity_id = str(row[0])
-        self.state.db.commit()
-
         self.state.dispatch(EntitiesSelect(entity_id))
         self._render_view()
 
@@ -296,19 +270,10 @@ class LitteraApp(App):
     def _create_document(self, title: str) -> None:
         if self.state is None or self.state.work is None:
             return
-        import uuid
-
         work_id = self.state.work.get("work", {}).get("id")
         if work_id is None:
             return
-
-        doc_id = str(uuid.uuid4())
-        with self.state.db.cursor() as cur:
-            cur.execute(
-                "INSERT INTO documents (id, work_id, title) VALUES (%s, %s, %s)",
-                (doc_id, work_id, title),
-            )
-        self.state.db.commit()
+        doc_id = actions.create_document(self.state.db, work_id, title)
         self.state.dispatch(OutlineSelect(kind="document", item_id=doc_id))
         self._render_view()
 
@@ -319,16 +284,7 @@ class LitteraApp(App):
         doc = self.state.current_document
         if not doc:
             return
-        import uuid
-
-        section_id = str(uuid.uuid4())
-        with self.state.db.cursor() as cur:
-            cur.execute(
-                "INSERT INTO sections (id, document_id, title, order_index) "
-                "VALUES (%s, %s, %s, COALESCE((SELECT MAX(order_index)+1 FROM sections WHERE document_id = %s), 1))",
-                (section_id, doc.id, title, doc.id),
-            )
-        self.state.db.commit()
+        section_id = actions.create_section(self.state.db, doc.id, title)
         self.state.dispatch(OutlineSelect(kind="section", item_id=section_id))
         self._render_view()
 
@@ -339,16 +295,7 @@ class LitteraApp(App):
         section = self.state.current_section
         if not section:
             return
-        import uuid
-
-        block_id = str(uuid.uuid4())
-        with self.state.db.cursor() as cur:
-            cur.execute(
-                "INSERT INTO blocks (id, section_id, block_type, language, source_text) "
-                "VALUES (%s, %s, 'paragraph', 'en', '(new block)')",
-                (block_id, section.id),
-            )
-        self.state.db.commit()
+        block_id = actions.create_block(self.state.db, section.id)
         self.state.dispatch(OutlineSelect(kind="block", item_id=block_id))
         self._render_view()
 
@@ -364,44 +311,21 @@ class LitteraApp(App):
         if sel.kind not in ("document", "section") or not sel.id:
             return
 
-        _TABLE_MAP = {"document": "documents", "section": "sections"}
-        table = _TABLE_MAP[sel.kind]
-
-        with self.state.db.cursor() as cur:
-            if sel.kind == "document":
-                cur.execute("SELECT title FROM documents WHERE id = %s", (sel.id,))
-            else:
-                cur.execute("SELECT title FROM sections WHERE id = %s", (sel.id,))
-            row = cur.fetchone()
-        current_title = row[0] if row and row[0] else ""
-
+        current_title = queries.fetch_item_title(self.state.db, sel.kind, sel.id)
         kind_label = sel.kind.title()
+        kind = sel.kind
         item_id = sel.id
 
         async def on_title_result(title: str | None) -> None:
             if title is None:
                 return
-            self._update_title(table, title, item_id)
+            actions.update_title(self.state.db, kind, item_id, title)
+            self._render_view()
 
         self.push_screen(
             InputDialog(f"Edit {kind_label}", "New title:", current_title),
             on_title_result,
         )
-
-    @safe_action
-    def _update_title(self, table: str, title: str, item_id: str) -> None:
-        if self.state is None:
-            return
-        _ALLOWED_TABLES = {"documents", "sections"}
-        if table not in _ALLOWED_TABLES:
-            return
-        with self.state.db.cursor() as cur:
-            if table == "documents":
-                cur.execute("UPDATE documents SET title = %s WHERE id = %s", (title, item_id))
-            else:
-                cur.execute("UPDATE sections SET title = %s WHERE id = %s", (title, item_id))
-        self.state.db.commit()
-        self._render_view()
 
     @safe_action
     def action_delete_item(self) -> None:
@@ -414,46 +338,24 @@ class LitteraApp(App):
         sel = self.state.entity_selection
         if not sel.id:
             return
-
-        _TABLE_MAP = {
-            "document": "documents",
-            "section": "sections",
-            "block": "blocks",
-        }
-        table = _TABLE_MAP.get(sel.kind)
-        if not table:
+        if sel.kind not in ("document", "section", "block"):
             return
 
         kind_label = sel.kind.title()
+        kind = sel.kind
         item_id = sel.id
 
         async def on_confirm(confirmed: bool) -> None:
             if not confirmed:
                 return
-            self._perform_delete(table, item_id)
+            actions.delete_item(self.state.db, kind, item_id)
+            self.state.dispatch(ClearSelection())
+            self._render_view()
 
         self.push_screen(
             ConfirmDialog(f"Delete {kind_label}?", "This cannot be undone."),
             on_confirm,
         )
-
-    @safe_action
-    def _perform_delete(self, table: str, item_id: str) -> None:
-        if self.state is None:
-            return
-        _ALLOWED_TABLES = {"documents", "sections", "blocks"}
-        if table not in _ALLOWED_TABLES:
-            return
-        with self.state.db.cursor() as cur:
-            if table == "documents":
-                cur.execute("DELETE FROM documents WHERE id = %s", (item_id,))
-            elif table == "sections":
-                cur.execute("DELETE FROM sections WHERE id = %s", (item_id,))
-            else:
-                cur.execute("DELETE FROM blocks WHERE id = %s", (item_id,))
-        self.state.db.commit()
-        self.state.dispatch(ClearSelection())
-        self._render_view()
 
     @safe_action
     def action_link_entity(self) -> None:
@@ -465,62 +367,21 @@ class LitteraApp(App):
         if not sel or sel.kind != "block" or not sel.id:
             return
 
-        block_id = sel.id  # capture by value, not reference
+        block_id = sel.id
 
         async def on_name_result(name: str | None) -> None:
             if not name:
                 return
-            self._perform_link(block_id, name)
+            try:
+                actions.link_entity(self.state.db, block_id, name)
+            except LookupError:
+                return
+            if hasattr(self, "notify"):
+                self.notify(f"Linked to {name}")
 
         self.push_screen(
             InputDialog("Link to Entity", "Entity Name:", ""), on_name_result
         )
-
-    @safe_action
-    def _perform_link(self, block_id: str, entity_name: str) -> None:
-        if self.state is None:
-            return
-
-        with self.state.db.cursor() as cur:
-            # Resolve entity
-            cur.execute(
-                "SELECT id FROM entities WHERE canonical_label = %s", (entity_name,)
-            )
-            row = cur.fetchone()
-
-            if row:
-                entity_id = str(row[0])
-            else:
-                # Auto-create
-                cur.execute(
-                    "INSERT INTO entities (entity_type, canonical_label) VALUES ('concept', %s) RETURNING id",
-                    (entity_name,),
-                )
-                new_row = cur.fetchone()
-                if new_row is None:
-                    return
-                entity_id = str(new_row[0])
-
-            # Link (mentions require language per schema)
-            cur.execute("SELECT language FROM blocks WHERE id = %s", (block_id,))
-            lang_row = cur.fetchone()
-            if lang_row is None:
-                return
-            language = lang_row[0]
-
-            cur.execute(
-                "SELECT 1 FROM mentions WHERE block_id = %s AND entity_id = %s AND language = %s",
-                (block_id, entity_id, language),
-            )
-            if cur.fetchone() is None:
-                cur.execute(
-                    "INSERT INTO mentions (block_id, entity_id, language) VALUES (%s, %s, %s)",
-                    (block_id, entity_id, language),
-                )
-        self.state.db.commit()
-
-        if hasattr(self, "notify"):
-            self.notify(f"Linked to {entity_name}")
 
     # =====================
     # Editing
@@ -536,29 +397,13 @@ class LitteraApp(App):
         if sel.kind != "entity" or not sel.id:
             return
 
-        with self.state.db.cursor() as cur:
-            cur.execute(
-                "SELECT entity_type, canonical_label FROM entities WHERE id = %s",
-                (sel.id,),
+        work_id = self.state.work.get("work", {}).get("id") if self.state.work else None
+        try:
+            entity_type, name, note = queries.fetch_entity_note(
+                self.state.db, sel.id, work_id
             )
-            row = cur.fetchone()
-            if row is None:
-                return
-            entity_type, name = row
-
-            work_id = self.state.work.get("work", {}).get("id") if self.state.work else None
-            note = ""
-            if work_id is not None:
-                cur.execute(
-                    """
-                    SELECT metadata->>'note'
-                    FROM entity_work_metadata
-                    WHERE entity_id = %s AND work_id = %s
-                    """,
-                    (sel.id, work_id),
-                )
-                note_row = cur.fetchone()
-                note = note_row[0] if note_row and note_row[0] else ""
+        except LookupError:
+            return
 
         self._start_edit(
             EditTarget(kind="entity_note", id=sel.id),
@@ -576,15 +421,10 @@ class LitteraApp(App):
         if sel.kind != "block" or not sel.id:
             return
 
-        with self.state.db.cursor() as cur:
-            cur.execute(
-                "SELECT language, source_text FROM blocks WHERE id = %s",
-                (sel.id,),
-            )
-            row = cur.fetchone()
-        if row is None:
+        try:
+            lang, text = queries.fetch_block_text(self.state.db, sel.id)
+        except LookupError:
             return
-        lang, text = row
 
         self._start_edit(
             EditTarget(kind="block_text", id=sel.id),
@@ -602,57 +442,27 @@ class LitteraApp(App):
         if session is None:
             return
 
-        new_text = session.current_text
-        try:
-            editor_widget = self.screen.query_one("#editor")
-            if hasattr(editor_widget, "text"):
-                new_text = editor_widget.text
-            elif hasattr(editor_widget, "value"):
-                new_text = editor_widget.value
-        except NoMatches:
-            pass
-
-        new_text = str(new_text)
+        new_text = self._get_editor_text()
 
         if session.target.kind == "entity_note":
             work_id = self.state.work.get("work", {}).get("id") if self.state.work else None
             if work_id is None:
                 return
-            import json
-
-            with self.state.db.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO entity_work_metadata (entity_id, work_id, metadata)
-                    VALUES (%s, %s, %s::jsonb)
-                    ON CONFLICT (entity_id, work_id)
-                    DO UPDATE SET metadata = EXCLUDED.metadata
-                    """,
-                    (session.target.id, work_id, json.dumps({"note": new_text})),
-                )
-            self.state.db.commit()
-            self.state.undo_redo.record(
-                session.target,
-                session.original_text,
-                new_text,
-            )
-            self.state.dispatch(ExitEditor())
-            self._render_view()
+            actions.save_entity_note(self.state.db, session.target.id, work_id, new_text)
 
         elif session.target.kind == "block_text":
-            with self.state.db.cursor() as cur:
-                cur.execute(
-                    "UPDATE blocks SET source_text = %s WHERE id = %s",
-                    (new_text, session.target.id),
-                )
-            self.state.db.commit()
-            self.state.undo_redo.record(
-                session.target,
-                session.original_text,
-                new_text,
-            )
-            self.state.dispatch(ExitEditor())
-            self._render_view()
+            actions.save_block_text(self.state.db, session.target.id, new_text)
+
+        else:
+            return
+
+        self.state.undo_redo.record(
+            session.target,
+            session.original_text,
+            new_text,
+        )
+        self.state.dispatch(ExitEditor())
+        self._render_view()
 
     def action_undo(self) -> None:
         if self.state is None or self.state.view != "editor":
@@ -665,7 +475,7 @@ class LitteraApp(App):
             return
 
         session.current_text = edit.old
-        self._update_editor_widget(session.current_text)
+        self._set_editor_text(session.current_text)
 
     def action_redo(self) -> None:
         if self.state is None or self.state.view != "editor":
@@ -678,7 +488,7 @@ class LitteraApp(App):
             return
 
         session.current_text = edit.new
-        self._update_editor_widget(session.current_text)
+        self._set_editor_text(session.current_text)
 
     # =====================
     # Internal helpers
@@ -688,10 +498,8 @@ class LitteraApp(App):
         if self.state is None:
             return
 
-        # Reset editor-local undo/redo for the new session.
         self.state.undo_redo.clear()
 
-        # Keep a single entry-point for editor overlay state.
         return_to = "entities" if target.kind == "entity_note" else "outline"
         self.state.dispatch(StartEdit(target=target, text=text, return_to=return_to))
         self._render_view()
@@ -711,18 +519,35 @@ class LitteraApp(App):
             return
         self.state.undo_redo.clear()
 
-    def _update_editor_widget(self, text: str) -> None:
+    def _get_editor_text(self) -> str:
+        """Read current text from the editor widget."""
+        if self.state is None:
+            return ""
+        session = self.state.edit_session
+        fallback = session.current_text if session else ""
         try:
-            editor_widget = self.screen.query_one("#editor")
+            widget = self.screen.query_one("#editor")
+            if hasattr(widget, "text"):
+                return str(widget.text)
+            if hasattr(widget, "value"):
+                return str(widget.value)
+        except NoMatches:
+            pass
+        return str(fallback)
+
+    def _set_editor_text(self, text: str) -> None:
+        """Write text into the editor widget, suppressing change events."""
+        try:
+            widget = self.screen.query_one("#editor")
         except NoMatches:
             return
 
         self._suppress_editor_change_events = True
         try:
-            if hasattr(editor_widget, "text"):
-                editor_widget.text = text
-            elif hasattr(editor_widget, "value"):
-                editor_widget.value = text
+            if hasattr(widget, "text"):
+                widget.text = text
+            elif hasattr(widget, "value"):
+                widget.value = text
         finally:
             self._suppress_editor_change_events = False
 
@@ -744,9 +569,20 @@ class LitteraApp(App):
             exit_on_error=False,
         )
 
+    def _refresh_data(self) -> None:
+        """Pre-load view data from DB into state before rendering."""
+        if self.state is None:
+            return
+        if self.state.view == "outline":
+            queries.refresh_outline(self.state)
+        elif self.state.view == "entities":
+            queries.refresh_entities(self.state)
+
     async def _render_view_async(self) -> None:
         if self.state is None:
             return
+
+        self._refresh_data()
 
         try:
             container = self.screen.query_one("#main")
