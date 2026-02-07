@@ -17,6 +17,11 @@ export const initialState = {
   sidecarPort: null,
   loading: false,
   error: null,
+  // Editor state
+  editing: false,          // true when ProseMirror is active
+  editorSectionId: null,   // section currently being edited
+  savedDoc: null,          // ProseMirror doc at last save (for dirty tracking)
+  dirty: false,            // unsaved changes exist
 };
 
 export function reduce(state, action) {
@@ -37,6 +42,10 @@ export function reduce(state, action) {
         selectedId: null,
         items: [],
         detail: null,
+        editing: false,
+        editorSectionId: null,
+        savedDoc: null,
+        dirty: false,
       };
 
     case "pop": {
@@ -47,6 +56,10 @@ export function reduce(state, action) {
         selectedId: null,
         items: [],
         detail: null,
+        editing: false,
+        editorSectionId: null,
+        savedDoc: null,
+        dirty: false,
       };
     }
 
@@ -59,6 +72,10 @@ export function reduce(state, action) {
         selectedId: null,
         items: [],
         detail: null,
+        editing: false,
+        editorSectionId: null,
+        savedDoc: null,
+        dirty: false,
       };
     }
 
@@ -85,6 +102,30 @@ export function reduce(state, action) {
 
     case "clear-error":
       return { ...state, error: null };
+
+    case "editor-open":
+      return {
+        ...state,
+        editing: true,
+        editorSectionId: action.sectionId,
+        savedDoc: action.doc,
+        dirty: false,
+      };
+
+    case "editor-close":
+      return {
+        ...state,
+        editing: false,
+        editorSectionId: null,
+        savedDoc: null,
+        dirty: false,
+      };
+
+    case "editor-mark-dirty":
+      return { ...state, dirty: true };
+
+    case "editor-mark-saved":
+      return { ...state, savedDoc: action.doc, dirty: false };
 
     default:
       return state;

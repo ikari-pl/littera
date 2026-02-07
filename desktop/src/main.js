@@ -1,17 +1,43 @@
 /**
- * main.js — Bootstrap, store wiring, navigation logic.
+ * main.js — Bootstrap, store wiring, navigation logic, editor lifecycle.
  *
  * Initializes the store, connects Tauri IPC for the sidecar port,
  * subscribes the renderer, and implements the navigation flow.
+ * Phase 2C: ProseMirror editor lifecycle, save, dirty tracking.
  */
 
 import { initialState, reduce, createStore } from "./state.js";
 import { render } from "./render.js";
 import * as api from "./api.js";
+import {
+  createEditor,
+  loadSection,
+  findDirtyBlocks,
+  blockNodeToMarkdown,
+} from "./editor.bundle.js";
 
 const { invoke } = window.__TAURI__.core;
 
 const store = createStore(reduce, initialState);
+
+// ---------------------------------------------------------------------------
+// Editor instance (lives outside store — mutable singleton)
+// ---------------------------------------------------------------------------
+
+let editorView = null;
+let pendingBlocks = null; // blocks to load once editor container is ready
+
+// ---------------------------------------------------------------------------
+// Dirty navigation guard
+// ---------------------------------------------------------------------------
+
+function checkDirtyBeforeNav() {
+  const state = store.getState();
+  if (state.editing && state.dirty) {
+    return window.confirm("You have unsaved changes. Discard them?");
+  }
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Event handlers (passed to render functions)
@@ -22,32 +48,35 @@ const handlers = {
     const state = store.getState();
 
     if (state.view === "entities") {
+      if (!checkDirtyBeforeNav()) return;
       store.dispatch({ type: "select-entity", id: item.id });
       loadEntityDetail(item.id);
       return;
     }
 
-    // Outline navigation: drill down on click
     const level = currentLevel(state);
 
     if (level === "documents") {
+      if (!checkDirtyBeforeNav()) return;
       store.dispatch({ type: "push", element: { kind: "document", id: item.id, title: item.title } });
       loadLevel();
     } else if (level === "sections") {
+      if (!checkDirtyBeforeNav()) return;
       store.dispatch({ type: "push", element: { kind: "section", id: item.id, title: item.title } });
       loadLevel();
     } else if (level === "blocks") {
-      // At block level, clicking selects (no deeper drill)
       store.dispatch({ type: "select", id: item.id });
     }
   },
 
   onBreadcrumbClick(depth) {
+    if (!checkDirtyBeforeNav()) return;
     store.dispatch({ type: "pop-to", depth });
     loadLevel();
   },
 
   onTabClick(view) {
+    if (!checkDirtyBeforeNav()) return;
     store.dispatch({ type: "set-view", view });
     if (view === "entities") {
       loadEntities();
@@ -78,7 +107,6 @@ async function loadLevel() {
 
   try {
     if (state.path.length === 0) {
-      // Root: load documents
       const docs = await api.fetchDocuments(port);
       store.dispatch({ type: "set-items", items: docs });
     } else {
@@ -88,13 +116,25 @@ async function loadLevel() {
         const sections = await api.fetchSections(port, last.id);
         store.dispatch({ type: "set-items", items: sections });
       } else if (last.kind === "section") {
-        // Load blocks for sidebar AND content area
         const blocks = await api.fetchBlocks(port, last.id);
+
+        // Sidebar items
         store.dispatch({ type: "set-items", items: blocks.map(b => ({
           ...b,
           title: (b.source_text || "").replace(/\n/g, " ").slice(0, 60),
         }))});
         store.dispatch({ type: "set-detail", detail: blocks });
+
+        // Open editor
+        if (editorView) {
+          // Editor already exists — just reload content
+          const doc = loadSection(editorView, blocks);
+          store.dispatch({ type: "editor-open", sectionId: last.id, doc });
+        } else {
+          // Stage blocks; subscriber will create editor + load after render
+          pendingBlocks = blocks;
+          store.dispatch({ type: "editor-open", sectionId: last.id, doc: null });
+        }
       }
     }
   } catch (err) {
@@ -128,12 +168,102 @@ async function loadEntityDetail(entityId) {
 }
 
 // ---------------------------------------------------------------------------
-// Subscribe renderer
+// Store subscriber — renders + manages editor lifecycle
 // ---------------------------------------------------------------------------
 
 store.subscribe((state) => {
   render(state, handlers);
+
+  // Create editor when entering editing mode
+  if (state.editing && !editorView) {
+    const container = document.getElementById("prosemirror-editor");
+    if (container) {
+      editorView = createEditor(container, {
+        onDocChange() {
+          store.dispatch({ type: "editor-mark-dirty" });
+        },
+      });
+
+      // Load staged blocks
+      if (pendingBlocks) {
+        const doc = loadSection(editorView, pendingBlocks);
+        store.dispatch({ type: "editor-mark-saved", doc });
+        pendingBlocks = null;
+      }
+    }
+  }
+
+  // Destroy editor when leaving editing mode
+  if (!state.editing && editorView) {
+    editorView.destroy();
+    editorView = null;
+    pendingBlocks = null;
+  }
 });
+
+// ---------------------------------------------------------------------------
+// Cmd+S save handler
+// ---------------------------------------------------------------------------
+
+document.addEventListener("keydown", async (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+    e.preventDefault();
+
+    const state = store.getState();
+    if (!state.editing || !state.dirty || !editorView) return;
+
+    const port = state.sidecarPort;
+    const savedDoc = state.savedDoc;
+    const currentDoc = editorView.state.doc;
+
+    try {
+      if (!savedDoc) {
+        // First save — treat all blocks as batch update
+        await saveAllBlocks(port, currentDoc, state.editorSectionId);
+      } else {
+        const { updates, creates, deletes } = findDirtyBlocks(savedDoc, currentDoc);
+
+        if (updates.length > 0) {
+          const batch = updates.map((u) => ({
+            id: u.id,
+            source_text: blockNodeToMarkdown(u.node),
+          }));
+          await api.saveBlocksBatch(port, batch);
+        }
+
+        for (const c of creates) {
+          await api.createBlock(port, state.editorSectionId, {
+            id: c.id,
+            block_type: c.node.attrs.block_type,
+            language: c.node.attrs.language,
+            source_text: blockNodeToMarkdown(c.node),
+          });
+        }
+
+        for (const d of deletes) {
+          await api.deleteBlock(port, d.id);
+        }
+      }
+
+      store.dispatch({ type: "editor-mark-saved", doc: currentDoc });
+    } catch (err) {
+      store.dispatch({ type: "error", message: `Save failed: ${err.message}` });
+    }
+  }
+});
+
+async function saveAllBlocks(port, doc, sectionId) {
+  const batch = [];
+  doc.forEach((child) => {
+    batch.push({
+      id: child.attrs.id,
+      source_text: blockNodeToMarkdown(child),
+    });
+  });
+  if (batch.length > 0) {
+    await api.saveBlocksBatch(port, batch);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Bootstrap

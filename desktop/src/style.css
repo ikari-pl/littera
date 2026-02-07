@@ -167,6 +167,7 @@ body {
   background: var(--bg-content);
   overflow-y: auto;
   padding: 2rem 2.5rem;
+  position: relative;
 }
 
 .content-placeholder {
@@ -357,6 +358,195 @@ body {
   right: 0;
   z-index: 100;
   text-align: center;
+}
+
+/* ==========================================================================
+   ProseMirror editor
+   ========================================================================== */
+
+/* Base ProseMirror styles (vendored from prosemirror-view/style/prosemirror.css) */
+.ProseMirror {
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+
+.ProseMirror pre {
+  white-space: pre-wrap;
+}
+
+.ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+
+.ProseMirror-hideselection *::-moz-selection {
+  background: transparent;
+}
+
+.ProseMirror-hideselection {
+  caret-color: transparent;
+}
+
+.ProseMirror li {
+  position: relative;
+}
+
+.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+.ProseMirror .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+
+.ProseMirror .ProseMirror-gapcursor:after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid var(--fg);
+  animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes ProseMirror-cursor-blink {
+  to { visibility: hidden; }
+}
+
+.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+/* Editor container */
+#prosemirror-editor {
+  max-width: 720px;
+  margin: 0 auto;
+  position: relative;
+}
+
+#prosemirror-editor .ProseMirror {
+  outline: none;
+  min-height: 200px;
+  color: var(--fg);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+#prosemirror-editor .ProseMirror:focus {
+  outline: none;
+}
+
+/* Block boundaries */
+.littera-block {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  transition: border-color 0.15s;
+}
+
+.littera-block:last-child {
+  border-bottom: none;
+}
+
+.littera-block:hover {
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Editor typography — reuse block-text patterns */
+#prosemirror-editor p {
+  margin-bottom: 0.8em;
+}
+
+#prosemirror-editor p:last-child {
+  margin-bottom: 0;
+}
+
+#prosemirror-editor h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--accent-hover);
+  margin: 1.2rem 0 0.6rem;
+}
+
+#prosemirror-editor h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--accent-hover);
+  margin: 1rem 0 0.5rem;
+}
+
+#prosemirror-editor h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0.8rem 0 0.4rem;
+}
+
+#prosemirror-editor strong {
+  font-weight: 600;
+  color: #fff;
+}
+
+#prosemirror-editor em {
+  font-style: italic;
+  color: var(--fg-dim);
+}
+
+#prosemirror-editor code {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.9em;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+#prosemirror-editor pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.8rem 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+
+#prosemirror-editor pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+#prosemirror-editor a {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* Mention pills */
+.mention-pill {
+  display: inline-block;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  font-size: 0.85em;
+  padding: 0.05em 0.5em;
+  border-radius: 10px;
+  vertical-align: baseline;
+  cursor: default;
+  user-select: none;
+  border: 1px solid rgba(124, 143, 168, 0.3);
+}
+
+/* Dirty indicator */
+.dirty-indicator {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.8;
+  pointer-events: none;
 }
 
 /* ==========================================================================

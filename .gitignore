@@ -28,5 +28,10 @@ Thumbs.db
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 
+# Node.js (ProseMirror editor build)
+desktop/node_modules/
+desktop/src/editor.bundle.js
+desktop/src/editor.bundle.js.map
+
 # Test work directory
 my-work/

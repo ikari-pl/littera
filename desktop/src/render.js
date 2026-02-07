@@ -131,6 +131,24 @@ function renderSidebar(state, handlers) {
 function renderContent(state) {
   const el = document.getElementById("content");
 
+  // When editing, ProseMirror owns the #content area — don't touch it
+  if (state.editing) {
+    // Ensure the editor container exists
+    if (!el.querySelector("#prosemirror-editor")) {
+      el.innerHTML = "";
+      const editorDiv = document.createElement("div");
+      editorDiv.id = "prosemirror-editor";
+      el.appendChild(editorDiv);
+    }
+    // Render dirty indicator
+    renderDirtyIndicator(el, state.dirty);
+    return;
+  }
+
+  // Not editing — remove dirty indicator if present
+  const indicator = el.querySelector(".dirty-indicator");
+  if (indicator) indicator.remove();
+
   if (state.loading) {
     el.innerHTML = '<div class="content-placeholder">Loading\u2026</div>';
     return;
@@ -155,6 +173,20 @@ function renderContent(state) {
   else if (level === "sections") hint = "Select a section to view its content";
 
   el.innerHTML = `<div class="content-placeholder">${hint}</div>`;
+}
+
+function renderDirtyIndicator(container, dirty) {
+  let indicator = container.querySelector(".dirty-indicator");
+  if (dirty) {
+    if (!indicator) {
+      indicator = document.createElement("div");
+      indicator.className = "dirty-indicator";
+      indicator.textContent = "Unsaved changes";
+      container.appendChild(indicator);
+    }
+  } else if (indicator) {
+    indicator.remove();
+  }
 }
 
 function currentLevel(state) {

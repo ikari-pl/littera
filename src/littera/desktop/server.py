@@ -28,7 +28,11 @@ ROUTES = [
     (re.compile(r"^/api/documents$"), "GET", "_get_documents"),
     (re.compile(r"^/api/documents/([^/]+)/sections$"), "GET", "_get_sections"),
     (re.compile(r"^/api/sections/([^/]+)/blocks$"), "GET", "_get_blocks"),
+    (re.compile(r"^/api/blocks/batch$"), "PUT", "_put_blocks_batch"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "GET", "_get_block"),
+    (re.compile(r"^/api/blocks/([^/]+)$"), "PUT", "_put_block"),
+    (re.compile(r"^/api/blocks/([^/]+)$"), "DELETE", "_delete_block"),
+    (re.compile(r"^/api/blocks$"), "POST", "_post_block"),
     (re.compile(r"^/api/entities$"), "GET", "_get_entities"),
     (re.compile(r"^/api/entities/([^/]+)$"), "GET", "_get_entity"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
@@ -42,9 +46,28 @@ class SidecarHandler(BaseHTTPRequestHandler):
     work_db: WorkDb  # Set by serve()
 
     def do_GET(self):
-        for pattern, method, handler_name in ROUTES:
+        self._dispatch("GET")
+
+    def do_PUT(self):
+        self._dispatch("PUT")
+
+    def do_POST(self):
+        self._dispatch("POST")
+
+    def do_DELETE(self):
+        self._dispatch("DELETE")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def _dispatch(self, method):
+        for pattern, route_method, handler_name in ROUTES:
             m = pattern.match(self.path)
-            if m and method == "GET":
+            if m and route_method == method:
                 handler = getattr(self, handler_name)
                 self._json_response(handler(*m.groups()))
                 return
@@ -72,11 +95,11 @@ class SidecarHandler(BaseHTTPRequestHandler):
     def _get_blocks(self, section_id: str):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+                "SELECT id, block_type, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
                 (section_id,),
             )
             return [
-                {"id": str(r[0]), "language": r[1], "source_text": r[2]}
+                {"id": str(r[0]), "block_type": r[1], "language": r[2], "source_text": r[3]}
                 for r in cur.fetchall()
             ]
 
@@ -186,6 +209,76 @@ class SidecarHandler(BaseHTTPRequestHandler):
 
     def _health(self):
         return {"status": "ok"}
+
+    # -----------------------------------------------------------------
+    # Write handlers
+    # -----------------------------------------------------------------
+
+    def _put_block(self, block_id: str):
+        body = self._read_json_body()
+        source_text = body.get("source_text")
+        if source_text is None:
+            return {"error": "source_text required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE blocks SET source_text = %s WHERE id = %s",
+                (source_text, block_id),
+            )
+        conn.commit()
+        return {"ok": True}
+
+    def _put_blocks_batch(self):
+        body = self._read_json_body()
+        blocks = body.get("blocks", [])
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            for b in blocks:
+                cur.execute(
+                    "UPDATE blocks SET source_text = %s WHERE id = %s",
+                    (b["source_text"], b["id"]),
+                )
+        conn.commit()
+        return {"ok": True, "count": len(blocks)}
+
+    def _post_block(self):
+        body = self._read_json_body()
+        block_id = body.get("id")
+        section_id = body.get("section_id")
+        block_type = body.get("block_type", "prose")
+        language = body.get("language", "en")
+        source_text = body.get("source_text", "")
+        if not section_id:
+            return {"error": "section_id required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            if block_id:
+                cur.execute(
+                    "INSERT INTO blocks (id, section_id, block_type, language, source_text) VALUES (%s, %s, %s, %s, %s)",
+                    (block_id, section_id, block_type, language, source_text),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO blocks (section_id, block_type, language, source_text) VALUES (%s, %s, %s, %s) RETURNING id",
+                    (section_id, block_type, language, source_text),
+                )
+                block_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": str(block_id)}
+
+    def _delete_block(self, block_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM blocks WHERE id = %s", (block_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _read_json_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            return {}
+        raw = self.rfile.read(length)
+        return json.loads(raw)
 
     # -----------------------------------------------------------------
     # Response helpers
