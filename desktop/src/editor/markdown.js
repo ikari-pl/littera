@@ -10,7 +10,34 @@
 
 import { MarkdownParser, MarkdownSerializer } from "prosemirror-markdown";
 import markdownit from "markdown-it";
+import { Schema } from "prosemirror-model";
 import { schema } from "./schema.js";
+
+// ---------------------------------------------------------------------------
+// Flat parsing schema — doc → block+ (no littera_block wrapper)
+//
+// MarkdownParser can't auto-wrap content into intermediate nodes like
+// littera_block. If we parse with the real schema (doc → littera_block+),
+// paragraphs fail to match and content is silently dropped. So we parse
+// with this flat schema, then manually wrap results in littera_block nodes.
+// ---------------------------------------------------------------------------
+
+const parseSchema = new Schema({
+  nodes: {
+    doc: { content: "block+" },
+    paragraph: schema.spec.nodes.get("paragraph"),
+    heading: schema.spec.nodes.get("heading"),
+    code_block: schema.spec.nodes.get("code_block"),
+    text: schema.spec.nodes.get("text"),
+    mention: schema.spec.nodes.get("mention"),
+  },
+  marks: {
+    strong: schema.spec.marks.get("strong"),
+    em: schema.spec.marks.get("em"),
+    code: schema.spec.marks.get("code"),
+    link: schema.spec.marks.get("link"),
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Custom markdown-it rule for {@Label|entity:uuid}
@@ -50,7 +77,7 @@ const md = markdownit("commonmark", { html: false }).use(mentionPlugin);
 // Parser
 // ---------------------------------------------------------------------------
 
-export const litteraParser = new MarkdownParser(schema, md, {
+export const litteraParser = new MarkdownParser(parseSchema, md, {
   blockquote: { block: "paragraph" }, // flatten blockquotes to paragraphs
   paragraph: { block: "paragraph" },
   heading: {
@@ -65,7 +92,6 @@ export const litteraParser = new MarkdownParser(schema, md, {
   bullet_list: { block: "paragraph" },
   ordered_list: { block: "paragraph" },
   list_item: { block: "paragraph" },
-  hardbreak: { node: "text", getAttrs: () => null },
   em: { mark: "em" },
   strong: { mark: "strong" },
   code_inline: { mark: "code" },
@@ -78,7 +104,6 @@ export const litteraParser = new MarkdownParser(schema, md, {
       };
     },
   },
-  softbreak: { node: "text", getAttrs: () => null },
   mention: {
     node: "mention",
     getAttrs(tok) {
@@ -150,21 +175,44 @@ export const litteraSerializer = new MarkdownSerializer(
 );
 
 // ---------------------------------------------------------------------------
+// Convert parseSchema nodes → real schema nodes
+// ---------------------------------------------------------------------------
+
+function convertNode(node) {
+  const realType = schema.nodes[node.type.name];
+  if (!realType) return node; // shouldn't happen
+
+  if (node.isText) {
+    // Re-create text with marks mapped to real schema
+    const marks = node.marks.map(
+      (m) => schema.marks[m.type.name].create(m.attrs)
+    );
+    return schema.text(node.text, marks);
+  }
+
+  // Recurse into children
+  const children = [];
+  node.content.forEach((child) => children.push(convertNode(child)));
+
+  return realType.create(node.attrs, children);
+}
+
+// ---------------------------------------------------------------------------
 // blocksToDoc — API block array → ProseMirror doc
 // ---------------------------------------------------------------------------
 
 export function blocksToDoc(blocks) {
   const blockNodes = blocks.map((block) => {
-    // Parse the block's markdown into a temporary doc
+    // Parse with the flat schema (doc → block+), then re-create nodes
+    // under the real schema and wrap in a littera_block.
     const parsed = litteraParser.parse(block.source_text || "");
 
-    // Extract the inner content nodes (paragraphs, headings, etc.)
+    // Convert parseSchema nodes → real schema nodes
     let children = [];
     parsed.content.forEach((child) => {
-      children.push(child);
+      children.push(convertNode(child));
     });
 
-    // If parsing produced nothing, add an empty paragraph
     if (children.length === 0) {
       children = [schema.nodes.paragraph.create()];
     }
