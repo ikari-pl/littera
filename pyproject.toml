@@ -34,6 +34,9 @@ reportIncompatibleVariableOverride = "error"
 reportUntypedFunctionDefinition = "error"
 littera = "littera.cli.app:app"
 
+[tool.setuptools.package-data]
+"littera.linguistics" = ["data/*.db"]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"

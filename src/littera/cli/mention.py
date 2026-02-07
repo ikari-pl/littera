@@ -150,19 +150,29 @@ def register(app: typer.Typer):
     def set_surface(
         selector: str = typer.Argument(help="Mention index or UUID"),
         plural: bool = typer.Option(False, "--plural", help="Pluralize"),
-        possessive: bool = typer.Option(False, "--possessive", help="Add possessive"),
+        possessive: bool = typer.Option(False, "--possessive", help="Add possessive (English only)"),
         article: Optional[str] = typer.Option(
-            None, "--article", help="Article: 'a' or 'the'"
+            None, "--article", help="Article: 'a' or 'the' (English only)"
+        ),
+        case: Optional[str] = typer.Option(
+            None, "--case", help="Case: 'plain'|'poss' (en) or 'nom'|'gen'|'dat'|'acc'|'inst'|'loc'|'voc' (pl)"
         ),
     ) -> None:
         """Set surface form on a mention from its entity's base_form + features."""
-        from littera.linguistics.en import surface_form
+        from littera.linguistics.dispatch import surface_form as dispatch_surface_form
+
+        # --possessive and --case are mutually exclusive
+        if possessive and case:
+            print("Error: --possessive and --case are mutually exclusive.")
+            raise typer.Exit(1)
 
         features: dict = {}
         if plural:
             features["number"] = "pl"
         if possessive:
             features["case"] = "poss"
+        elif case:
+            features["case"] = case
         if article:
             if article not in ("a", "the"):
                 print(f"Invalid article: {article} (must be 'a' or 'the')")
@@ -200,7 +210,7 @@ def register(app: typer.Typer):
                 row = cur.fetchone()
                 properties = row[0] if row and row[0] else None
 
-                result = surface_form(base_form, features or None, properties)
+                result = dispatch_surface_form(language, base_form, features or None, properties)
 
                 cur.execute(
                     "UPDATE mentions SET surface_form = %s, features = %s WHERE id = %s",

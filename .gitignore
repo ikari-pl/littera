@@ -33,5 +33,8 @@ desktop/node_modules/
 desktop/src/editor.bundle.js
 desktop/src/editor.bundle.js.map
 
+# PoliMorf source TSV (large, download separately)
+scripts/polimorf.tab
+
 # Test work directory
 my-work/
