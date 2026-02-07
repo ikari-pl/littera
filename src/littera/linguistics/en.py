@@ -19,24 +19,33 @@ def _is_proper_noun(text: str) -> bool:
     return len(words) >= 2 and all(w[0].isupper() for w in words)
 
 
-def surface_form(base_form: str, features: dict | None = None) -> str:
+def surface_form(
+    base_form: str,
+    features: dict | None = None,
+    properties: dict | None = None,
+) -> str:
     """Generate English surface form from base_form + features.
 
     features keys:
         number:  "sg" (default) | "pl"
         case:    "plain" (default) | "poss"
         article: None (default) | "a" | "the"
+
+    properties keys (from entity):
+        countable: "yes" (default) | "no" — uncountable nouns skip pluralization
     """
     if not features:
         return base_form
 
     text = base_form
+    props = properties or {}
 
-    # Step 1: Pluralize (skip proper nouns — they don't inflect)
+    # Step 1: Pluralize (skip proper nouns and uncountable nouns)
     if features.get("number") == "pl" and not _is_proper_noun(text):
-        result = _engine.plural_noun(text)
-        if result:
-            text = result
+        if props.get("countable") != "no":
+            result = _engine.plural_noun(text)
+            if result:
+                text = result
 
     # Step 2: Possessive suffix
     if features.get("case") == "poss":

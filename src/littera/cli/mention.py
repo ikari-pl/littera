@@ -192,7 +192,15 @@ def register(app: typer.Typer):
                     row = cur.fetchone()
                     base_form = row[0] if row else "?"
 
-                result = surface_form(base_form, features or None)
+                # Fetch entity properties for morphology constraints
+                cur.execute(
+                    "SELECT properties FROM entities WHERE id = %s",
+                    (entity_id,),
+                )
+                row = cur.fetchone()
+                properties = row[0] if row and row[0] else None
+
+                result = surface_form(base_form, features or None, properties)
 
                 cur.execute(
                     "UPDATE mentions SET surface_form = %s, features = %s WHERE id = %s",

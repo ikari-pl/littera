@@ -21,6 +21,9 @@ def register(app: typer.Typer) -> None:
         article: Optional[str] = typer.Option(
             None, "--article", help="Article: 'a' or 'the'"
         ),
+        countable: Optional[str] = typer.Option(
+            None, "--countable", help="Countability: 'yes' or 'no'"
+        ),
     ) -> None:
         """Preview English surface form generation."""
         features: dict = {}
@@ -34,5 +37,12 @@ def register(app: typer.Typer) -> None:
                 raise typer.Exit(1)
             features["article"] = article
 
-        result = surface_form(base_form, features or None)
+        properties: dict | None = None
+        if countable is not None:
+            if countable not in ("yes", "no"):
+                print(f"Invalid countable value: {countable} (must be 'yes' or 'no')")
+                raise typer.Exit(1)
+            properties = {"countable": countable}
+
+        result = surface_form(base_form, features or None, properties)
         print(result)

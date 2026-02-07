@@ -65,7 +65,7 @@ def register(app: typer.Typer):
             with open_work_db() as db:
                 cur = db.conn.cursor()
                 cur.execute(
-                    "SELECT id, entity_type, canonical_label FROM entities ORDER BY created_at"
+                    "SELECT id, entity_type, canonical_label, properties FROM entities ORDER BY created_at"
                 )
                 rows = cur.fetchall()
         except RuntimeError as e:
@@ -77,8 +77,12 @@ def register(app: typer.Typer):
             return
 
         print("Entities:")
-        for idx, (eid, etype, label) in enumerate(rows, 1):
-            print(f"[{idx}] {etype}: {label}")
+        for idx, (eid, etype, label, props) in enumerate(rows, 1):
+            line = f"[{idx}] {etype}: {label}"
+            if props:
+                formatted = ", ".join(f"{k}: {v}" for k, v in props.items())
+                line += f"  {{{formatted}}}"
+            print(line)
 
     @app.command()
     def delete(selector: str):
