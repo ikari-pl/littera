@@ -24,5 +24,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Tauri build artifacts
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
 # Test work directory
 my-work/
