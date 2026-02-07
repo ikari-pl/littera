@@ -48,6 +48,11 @@ mention_app = typer.Typer(help="Manage mentions")
 app.add_typer(mention_app, name="mention")
 app.add_typer(mention_app, name="mentions")
 
+# Alignments
+alignment_app = typer.Typer(help="Manage block alignments")
+app.add_typer(alignment_app, name="alignment")
+app.add_typer(alignment_app, name="alignments")
+
 
 # =============================================================================
 # Register commands to subgroups
@@ -61,6 +66,8 @@ from littera.cli import entity_note as entity_note_cmd
 from littera.cli import entity_label as entity_label_cmd
 from littera.cli import entity_property as entity_property_cmd
 from littera.cli import mention as mention_cmd
+from littera.cli import alignment as alignment_cmd
+from littera.cli import entity_suggest as entity_suggest_cmd
 
 doc_cmd.register(doc_app)
 section_cmd.register(section_app)
@@ -69,7 +76,9 @@ entity_cmd.register(entity_app)
 entity_note_cmd.register(entity_app)  # adds note-set and note-show to entity subgroup
 entity_label_cmd.register(entity_app)  # adds label-add, label-list, label-delete
 entity_property_cmd.register(entity_app)  # adds property-set, property-list, property-delete
+entity_suggest_cmd.register(entity_app)  # adds suggest-label
 mention_cmd.register(mention_app)
+alignment_cmd.register(alignment_app)
 
 
 # =============================================================================
