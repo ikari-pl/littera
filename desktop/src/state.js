@@ -1,0 +1,111 @@
+/**
+ * state.js — Elm-style state management for Littera desktop.
+ *
+ * Ported from tui/state.py's reducer pattern.
+ * Pure functions: reduce(state, action) → newState.
+ */
+
+export const initialState = {
+  view: "outline",        // "outline" | "entities"
+  path: [],               // [{kind, id, title}, ...]
+  items: [],              // current sidebar list items
+  selectedId: null,
+  detail: null,           // content area data
+  entities: [],
+  selectedEntityId: null,
+  entityDetail: null,
+  sidecarPort: null,
+  loading: false,
+  error: null,
+};
+
+export function reduce(state, action) {
+  switch (action.type) {
+    case "init":
+      return { ...state, sidecarPort: action.port };
+
+    case "set-items":
+      return { ...state, items: action.items, loading: false };
+
+    case "select":
+      return { ...state, selectedId: action.id };
+
+    case "push":
+      return {
+        ...state,
+        path: [...state.path, action.element],
+        selectedId: null,
+        items: [],
+        detail: null,
+      };
+
+    case "pop": {
+      const newPath = state.path.slice(0, -1);
+      return {
+        ...state,
+        path: newPath,
+        selectedId: null,
+        items: [],
+        detail: null,
+      };
+    }
+
+    case "pop-to": {
+      // Pop to a specific depth (breadcrumb click)
+      const newPath = state.path.slice(0, action.depth);
+      return {
+        ...state,
+        path: newPath,
+        selectedId: null,
+        items: [],
+        detail: null,
+      };
+    }
+
+    case "set-detail":
+      return { ...state, detail: action.detail, loading: false };
+
+    case "set-view":
+      return { ...state, view: action.view };
+
+    case "set-entities":
+      return { ...state, entities: action.entities, loading: false };
+
+    case "select-entity":
+      return { ...state, selectedEntityId: action.id };
+
+    case "set-entity-detail":
+      return { ...state, entityDetail: action.detail, loading: false };
+
+    case "loading":
+      return { ...state, loading: true };
+
+    case "error":
+      return { ...state, error: action.message, loading: false };
+
+    case "clear-error":
+      return { ...state, error: null };
+
+    default:
+      return state;
+  }
+}
+
+export function createStore(reducer, initial) {
+  let state = initial;
+  const listeners = [];
+  return {
+    getState: () => state,
+    dispatch(action) {
+      state = reducer(state, action);
+      for (const fn of listeners) fn(state);
+    },
+    subscribe(fn) {
+      listeners.push(fn);
+      return () => {
+        const idx = listeners.indexOf(fn);
+        if (idx >= 0) listeners.splice(idx, 1);
+      };
+    },
+  };
+}

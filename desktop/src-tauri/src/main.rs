@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, WebviewWindow};
 
 /// Holds the Python sidecar process and its discovered port.
 struct Sidecar {
@@ -104,6 +104,11 @@ fn sidecar_port(state: tauri::State<SidecarState>) -> Result<u16, String> {
         .ok_or_else(|| "Sidecar not ready".to_string())
 }
 
+#[tauri::command]
+fn open_devtools(window: WebviewWindow) {
+    window.open_devtools();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -125,9 +130,19 @@ pub fn run() {
                     // Let the app open anyway — frontend will show an error
                 }
             }
+
+            // Open devtools: invoke("open_devtools") from JS console,
+            // or set LITTERA_DEVTOOLS=1 to auto-open on startup.
+            #[cfg(debug_assertions)]
+            if std::env::var("LITTERA_DEVTOOLS").is_ok() {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![sidecar_port])
+        .invoke_handler(tauri::generate_handler![sidecar_port, open_devtools])
         .run(tauri::generate_context!())
         .expect("error running Littera");
 }
