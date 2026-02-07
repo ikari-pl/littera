@@ -2,15 +2,15 @@
  * editor.js — ProseMirror EditorView setup, plugins, and keymaps.
  *
  * Exports:
- *   createEditor(container, { onDocChange }) — mount editor with plugins
- *   loadSection(view, blocks)               — replace doc from block array
+ *   createEditor(container, { onDocChange, fetchEntities }) — mount editor with plugins
+ *   loadSection(view, blocks)                               — replace doc from block array
  */
 
 import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { history, undo, redo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
-import { baseKeymap } from "prosemirror-commands";
+import { baseKeymap, toggleMark } from "prosemirror-commands";
 import {
   inputRules,
   textblockTypeInputRule,
@@ -19,6 +19,10 @@ import {
 import { schema } from "./schema.js";
 import { blocksToDoc } from "./markdown.js";
 import { MentionView } from "./mention-view.js";
+import { bubbleToolbar } from "./bubble-toolbar.js";
+import { slashMenu } from "./slash-menu.js";
+import { mentionPopup } from "./mention-popup.js";
+import { showLinkInput } from "./popup-utils.js";
 
 // ---------------------------------------------------------------------------
 // Input rules — Markdown-like shortcuts
@@ -81,10 +85,33 @@ function createBlockAfter(state, dispatch) {
 }
 
 // ---------------------------------------------------------------------------
+// promptLink command — Cmd+K toggles link mark or shows URL input
+// ---------------------------------------------------------------------------
+
+function promptLink(state, dispatch, view) {
+  const linkMark = schema.marks.link;
+  const { from, $from, to, empty } = state.selection;
+  const isActive = empty
+    ? !!(state.storedMarks || $from.marks()).find((m) => m.type === linkMark)
+    : state.doc.rangeHasMark(from, to, linkMark);
+
+  if (isActive) {
+    return toggleMark(linkMark)(state, dispatch);
+  }
+
+  if (view) {
+    showLinkInput(view, (href) => {
+      toggleMark(linkMark, { href })(view.state, view.dispatch);
+    });
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // createEditor — mount EditorView
 // ---------------------------------------------------------------------------
 
-export function createEditor(container, { onDocChange }) {
+export function createEditor(container, { onDocChange, fetchEntities }) {
   const doc = schema.nodes.doc.create(null, [
     schema.nodes.littera_block.create(
       { id: "placeholder", block_type: "prose", language: "en" },
@@ -96,9 +123,20 @@ export function createEditor(container, { onDocChange }) {
     doc,
     plugins: [
       history(),
-      keymap({ "Mod-z": undo, "Mod-Shift-z": redo, "Mod-y": redo }),
+      keymap({
+        "Mod-z": undo,
+        "Mod-Shift-z": redo,
+        "Mod-y": redo,
+        "Mod-b": toggleMark(schema.marks.strong),
+        "Mod-i": toggleMark(schema.marks.em),
+        "Mod-e": toggleMark(schema.marks.code),
+        "Mod-k": promptLink,
+      }),
       keymap({ "Shift-Enter": createBlockAfter }),
+      slashMenu(),
+      mentionPopup({ fetchEntities: fetchEntities || (() => Promise.resolve([])) }),
       keymap(baseKeymap),
+      bubbleToolbar(),
       litteraInputRules,
     ],
   });

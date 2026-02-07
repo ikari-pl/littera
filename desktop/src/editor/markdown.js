@@ -28,6 +28,7 @@ const parseSchema = new Schema({
     paragraph: schema.spec.nodes.get("paragraph"),
     heading: schema.spec.nodes.get("heading"),
     code_block: schema.spec.nodes.get("code_block"),
+    horizontal_rule: schema.spec.nodes.get("horizontal_rule"),
     text: schema.spec.nodes.get("text"),
     mention: schema.spec.nodes.get("mention"),
   },
@@ -88,7 +89,7 @@ export const litteraParser = new MarkdownParser(parseSchema, md, {
   },
   code_block: { block: "code_block" },
   fence: { block: "code_block" },
-  hr: { node: "paragraph" }, // no HR node, treat as paragraph break
+  hr: { node: "horizontal_rule" },
   bullet_list: { block: "paragraph" },
   ordered_list: { block: "paragraph" },
   list_item: { block: "paragraph" },
@@ -135,6 +136,10 @@ export const litteraSerializer = new MarkdownSerializer(
       state.write("```\n");
       state.text(node.textContent, false);
       state.write("\n```");
+      state.closeBlock(node);
+    },
+    horizontal_rule(state, node) {
+      state.write("---");
       state.closeBlock(node);
     },
     text(state, node) {

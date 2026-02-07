@@ -21,6 +21,17 @@ const { invoke } = window.__TAURI__.core;
 const store = createStore(reduce, initialState);
 
 // ---------------------------------------------------------------------------
+// Preview text helper — strips markdown mention syntax for sidebar display
+// ---------------------------------------------------------------------------
+
+function previewText(sourceText) {
+  return (sourceText || "")
+    .replace(/\{@([^|]+)\|entity:[^}]+\}/g, "$1")  // {@Label|entity:uuid} → Label
+    .replace(/\n/g, " ")
+    .slice(0, 60);
+}
+
+// ---------------------------------------------------------------------------
 // Editor instance (lives outside store — mutable singleton)
 // ---------------------------------------------------------------------------
 
@@ -121,7 +132,7 @@ async function loadLevel() {
         // Sidebar items
         store.dispatch({ type: "set-items", items: blocks.map(b => ({
           ...b,
-          title: (b.source_text || "").replace(/\n/g, " ").slice(0, 60),
+          title: previewText(b.source_text),
         }))});
         store.dispatch({ type: "set-detail", detail: blocks });
 
@@ -182,6 +193,7 @@ store.subscribe((state) => {
         onDocChange() {
           store.dispatch({ type: "editor-mark-dirty" });
         },
+        fetchEntities: () => api.fetchEntities(store.getState().sidecarPort),
       });
 
       // Load staged blocks
@@ -246,6 +258,20 @@ document.addEventListener("keydown", async (e) => {
       }
 
       store.dispatch({ type: "editor-mark-saved", doc: currentDoc });
+
+      // Refresh sidebar previews from the saved doc
+      const items = [];
+      currentDoc.forEach((blockNode) => {
+        const md = blockNodeToMarkdown(blockNode);
+        items.push({
+          id: blockNode.attrs.id,
+          block_type: blockNode.attrs.block_type,
+          language: blockNode.attrs.language,
+          source_text: md,
+          title: previewText(md),
+        });
+      });
+      store.dispatch({ type: "set-items", items });
     } catch (err) {
       store.dispatch({ type: "error", message: `Save failed: ${err.message}` });
     }

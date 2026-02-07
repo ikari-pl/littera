@@ -88,6 +88,14 @@ export const schema = new Schema({
       },
     },
 
+    horizontal_rule: {
+      group: "block",
+      parseDOM: [{ tag: "hr" }],
+      toDOM() {
+        return ["hr"];
+      },
+    },
+
     text: {
       group: "inline",
     },
