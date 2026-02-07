@@ -53,6 +53,11 @@ alignment_app = typer.Typer(help="Manage block alignments")
 app.add_typer(alignment_app, name="alignment")
 app.add_typer(alignment_app, name="alignments")
 
+# Reviews
+review_app = typer.Typer(help="Manage reviews")
+app.add_typer(review_app, name="review")
+app.add_typer(review_app, name="reviews")
+
 
 # =============================================================================
 # Register commands to subgroups
@@ -67,6 +72,7 @@ from littera.cli import entity_label as entity_label_cmd
 from littera.cli import entity_property as entity_property_cmd
 from littera.cli import mention as mention_cmd
 from littera.cli import alignment as alignment_cmd
+from littera.cli import review as review_cmd
 from littera.cli import entity_suggest as entity_suggest_cmd
 
 doc_cmd.register(doc_app)
@@ -79,6 +85,7 @@ entity_property_cmd.register(entity_app)  # adds property-set, property-list, pr
 entity_suggest_cmd.register(entity_app)  # adds suggest-label
 mention_cmd.register(mention_app)
 alignment_cmd.register(alignment_app)
+review_cmd.register(review_app)
 
 
 # =============================================================================
