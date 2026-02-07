@@ -1,7 +1,9 @@
-"""Mention commands: littera mention add|list|delete"""
+"""Mention commands: littera mention add|list|delete|set-surface"""
 
+import json
 import sys
 import uuid
+from typing import Optional
 
 import typer
 
@@ -42,9 +44,9 @@ def _resolve_entity(cur, entity_type: str, name: str) -> str:
     return row[0]
 
 
-def _resolve_mention(cur, selector: str) -> tuple[str, str, str]:
-    """Resolve mention selector to (id, block_id, entity_id)."""
-    cur.execute("SELECT id, block_id, entity_id FROM mentions ORDER BY id")
+def _resolve_mention(cur, selector: str) -> tuple[str, str, str, str]:
+    """Resolve mention selector to (id, block_id, entity_id, language)."""
+    cur.execute("SELECT id, block_id, entity_id, language FROM mentions ORDER BY id")
     rows = cur.fetchall()
 
     if selector.isdigit():
@@ -55,9 +57,9 @@ def _resolve_mention(cur, selector: str) -> tuple[str, str, str]:
         sys.exit(1)
 
     # Try UUID match
-    for mid, bid, eid in rows:
+    for mid, bid, eid, lang in rows:
         if str(mid) == selector:
-            return mid, bid, eid
+            return mid, bid, eid, lang
 
     print(f"Mention not found: {selector}")
     sys.exit(1)
@@ -94,7 +96,8 @@ def register(app: typer.Typer):
                 cur = db.conn.cursor()
                 cur.execute(
                     """
-                    SELECT m.id, b.source_text, e.entity_type, e.canonical_label
+                    SELECT m.id, b.source_text, e.entity_type, e.canonical_label,
+                           m.surface_form
                     FROM mentions m
                     JOIN blocks b ON m.block_id = b.id
                     JOIN entities e ON m.entity_id = e.id
@@ -111,9 +114,12 @@ def register(app: typer.Typer):
             return
 
         print("Mentions:")
-        for idx, (mid, block_text, etype, label) in enumerate(rows, 1):
+        for idx, (mid, block_text, etype, label, sform) in enumerate(rows, 1):
             preview = block_text.replace("\n", " ")[:30]
-            print(f"[{idx}] \"{preview}...\" → {etype}: {label}")
+            line = f"[{idx}] \"{preview}...\" → {etype}: {label}"
+            if sform:
+                line += f"  surface: \"{sform}\""
+            print(line)
 
     @app.command()
     def delete(selector: str):
@@ -121,7 +127,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                mid, block_id, entity_id = _resolve_mention(cur, selector)
+                mid, block_id, entity_id, _lang = _resolve_mention(cur, selector)
 
                 # Get info for confirmation message
                 cur.execute(
@@ -139,3 +145,62 @@ def register(app: typer.Typer):
             sys.exit(1)
 
         print(f"✓ Mention deleted: → {etype}: {label}")
+
+    @app.command("set-surface")
+    def set_surface(
+        selector: str = typer.Argument(help="Mention index or UUID"),
+        plural: bool = typer.Option(False, "--plural", help="Pluralize"),
+        possessive: bool = typer.Option(False, "--possessive", help="Add possessive"),
+        article: Optional[str] = typer.Option(
+            None, "--article", help="Article: 'a' or 'the'"
+        ),
+    ) -> None:
+        """Set surface form on a mention from its entity's base_form + features."""
+        from littera.linguistics.en import surface_form
+
+        features: dict = {}
+        if plural:
+            features["number"] = "pl"
+        if possessive:
+            features["case"] = "poss"
+        if article:
+            if article not in ("a", "the"):
+                print(f"Invalid article: {article} (must be 'a' or 'the')")
+                raise typer.Exit(1)
+            features["article"] = article
+
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                mid, block_id, entity_id, language = _resolve_mention(cur, selector)
+
+                # Look up base_form from entity_labels for this language
+                cur.execute(
+                    "SELECT base_form FROM entity_labels "
+                    "WHERE entity_id = %s AND language = %s",
+                    (entity_id, language),
+                )
+                row = cur.fetchone()
+                if row:
+                    base_form = row[0]
+                else:
+                    # Fall back to canonical_label
+                    cur.execute(
+                        "SELECT canonical_label FROM entities WHERE id = %s",
+                        (entity_id,),
+                    )
+                    row = cur.fetchone()
+                    base_form = row[0] if row else "?"
+
+                result = surface_form(base_form, features or None)
+
+                cur.execute(
+                    "UPDATE mentions SET surface_form = %s, features = %s WHERE id = %s",
+                    (result, json.dumps(features) if features else None, mid),
+                )
+                db.conn.commit()
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"✓ Surface form set: \"{result}\"")

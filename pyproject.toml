@@ -10,6 +10,7 @@ dependencies = [
   "rich>=13",
   "PyYAML>=6",
   "textual>=0.50",
+  "inflect>=7",
 ]
 
 [project.scripts]

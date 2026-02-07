@@ -77,10 +77,12 @@ mention_cmd.register(mention_app)
 from littera.cli import init as init_cmd
 from littera.cli import status as status_cmd
 from littera.cli import mntn_db as mntn_db_cmd
+from littera.cli import inflect as inflect_cmd
 
 init_cmd.register(app)
 status_cmd.register(app)
 mntn_db_cmd.register(app)
+inflect_cmd.register(app)
 
 
 @app.command()
