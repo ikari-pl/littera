@@ -180,6 +180,23 @@ body {
   color: #fff;
 }
 
+/* Inline rename input */
+.sidebar-rename-input {
+  background: transparent;
+  border: 1px solid var(--selected-border);
+  color: var(--fg);
+  font-size: 0.9rem;
+  padding: 0.3rem 0.5rem;
+  width: 100%;
+  outline: none;
+  border-radius: 3px;
+  font-family: inherit;
+}
+
+.sidebar-rename-input:focus {
+  border-color: var(--accent);
+}
+
 .sidebar-loading,
 .sidebar-empty {
   padding: 0.8rem;

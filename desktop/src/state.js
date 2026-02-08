@@ -22,6 +22,8 @@ export const initialState = {
   sidecarPort: null,
   loading: false,
   error: null,
+  // Inline rename state
+  editingItemId: null,     // ID of sidebar item being renamed
   // Editor state
   editing: false,          // true when ProseMirror is active
   editorSectionId: null,   // section currently being edited
@@ -59,6 +61,7 @@ export function reduce(state, action) {
         selectedId: null,
         items: [],
         detail: null,
+        editingItemId: null,
         editing: false,
         editorSectionId: null,
         savedDoc: null,
@@ -73,6 +76,7 @@ export function reduce(state, action) {
         selectedId: null,
         items: [],
         detail: null,
+        editingItemId: null,
         editing: false,
         editorSectionId: null,
         savedDoc: null,
@@ -89,6 +93,7 @@ export function reduce(state, action) {
         selectedId: null,
         items: [],
         detail: null,
+        editingItemId: null,
         editing: false,
         editorSectionId: null,
         savedDoc: null,
@@ -143,6 +148,12 @@ export function reduce(state, action) {
 
     case "editor-mark-saved":
       return { ...state, savedDoc: action.doc, dirty: false };
+
+    case "start-rename":
+      return { ...state, editingItemId: action.id };
+
+    case "stop-rename":
+      return { ...state, editingItemId: null };
 
     default:
       return state;

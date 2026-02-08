@@ -163,6 +163,33 @@ const handlers = {
     }
   },
 
+  onStartRename(item) {
+    store.dispatch({ type: "start-rename", id: item.id });
+  },
+
+  onCancelRename() {
+    store.dispatch({ type: "stop-rename" });
+  },
+
+  async onRenameItem(item, newTitle) {
+    store.dispatch({ type: "stop-rename" });
+    if (!newTitle || newTitle === item.title) return;
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+    const level = currentLevel(state);
+    try {
+      if (level === "documents") {
+        await api.renameDocument(port, item.id, newTitle);
+      } else if (level === "sections") {
+        await api.renameSection(port, item.id, newTitle);
+      }
+      await loadLevel();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onAddItem() {
     const state = store.getState();
     const port = state.sidecarPort;

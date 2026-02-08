@@ -85,6 +85,14 @@ export function deleteBlock(port, blockId) {
   return del(port, `/api/blocks/${blockId}`);
 }
 
+export function renameDocument(port, id, title) {
+  return put(port, `/api/documents/${id}`, { title });
+}
+
+export function renameSection(port, id, title) {
+  return put(port, `/api/sections/${id}`, { title });
+}
+
 export function createDocument(port, title) {
   return post(port, "/api/documents", { title });
 }

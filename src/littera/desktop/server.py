@@ -27,9 +27,11 @@ from littera.db.workdb import open_work_db, WorkDb
 ROUTES = [
     (re.compile(r"^/api/documents$"), "GET", "_get_documents"),
     (re.compile(r"^/api/documents$"), "POST", "_post_document"),
+    (re.compile(r"^/api/documents/([^/]+)$"), "PUT", "_put_document"),
     (re.compile(r"^/api/documents/([^/]+)$"), "DELETE", "_delete_document"),
     (re.compile(r"^/api/documents/([^/]+)/sections$"), "GET", "_get_sections"),
     (re.compile(r"^/api/sections$"), "POST", "_post_section"),
+    (re.compile(r"^/api/sections/([^/]+)$"), "PUT", "_put_section"),
     (re.compile(r"^/api/sections/([^/]+)$"), "DELETE", "_delete_section"),
     (re.compile(r"^/api/sections/([^/]+)/blocks$"), "GET", "_get_blocks"),
     (re.compile(r"^/api/blocks/batch$"), "PUT", "_put_blocks_batch"),
@@ -220,6 +222,34 @@ class SidecarHandler(BaseHTTPRequestHandler):
     # -----------------------------------------------------------------
     # Write handlers
     # -----------------------------------------------------------------
+
+    def _put_document(self, document_id: str):
+        body = self._read_json_body()
+        title = body.get("title")
+        if title is None:
+            return {"error": "title required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE documents SET title = %s WHERE id = %s",
+                (title, document_id),
+            )
+        conn.commit()
+        return {"ok": True}
+
+    def _put_section(self, section_id: str):
+        body = self._read_json_body()
+        title = body.get("title")
+        if title is None:
+            return {"error": "title required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sections SET title = %s WHERE id = %s",
+                (title, section_id),
+            )
+        conn.commit()
+        return {"ok": True}
 
     def _put_block(self, block_id: str):
         body = self._read_json_body()

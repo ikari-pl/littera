@@ -331,8 +331,43 @@ function renderSidebar(state, handlers) {
       const label = document.createElement("span");
       label.textContent = item.label;
       li.appendChild(label);
+    } else if (item.id === state.editingItemId) {
+      // Inline rename input
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "sidebar-rename-input";
+      input.value = item.title || "";
+      let cancelled = false;
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handlers.onRenameItem(item, input.value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelled = true;
+          handlers.onCancelRename();
+        }
+      });
+      input.addEventListener("blur", () => {
+        if (!cancelled) {
+          handlers.onRenameItem(item, input.value);
+        }
+      });
+      li.appendChild(input);
+      // Auto-focus after DOM insertion
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
     } else {
-      li.textContent = item.title || "(untitled)";
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "sidebar-item-title";
+      titleSpan.textContent = item.title || "(untitled)";
+      titleSpan.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        handlers.onStartRename(item);
+      });
+      li.appendChild(titleSpan);
       if (item.language) {
         const badge = document.createElement("span");
         badge.className = "lang-badge";
