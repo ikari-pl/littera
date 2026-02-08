@@ -49,7 +49,9 @@ ROUTES = [
     (re.compile(r"^/api/entities/([^/]+)/note$"), "PUT", "_put_entity_note"),
     (re.compile(r"^/api/entities/([^/]+)/labels$"), "POST", "_post_entity_label"),
     (re.compile(r"^/api/labels/([^/]+)$"), "DELETE", "_delete_label"),
+    (re.compile(r"^/api/mentions/([^/]+)/surface$"), "PUT", "_put_mention_surface"),
     (re.compile(r"^/api/mentions/([^/]+)$"), "DELETE", "_delete_mention"),
+    (re.compile(r"^/api/inflect$"), "POST", "_post_inflect"),
     (re.compile(r"^/api/alignments$"), "GET", "_get_alignments"),
     (re.compile(r"^/api/alignments$"), "POST", "_post_alignment"),
     (re.compile(r"^/api/alignments/([^/]+)$"), "DELETE", "_delete_alignment"),
@@ -401,6 +403,70 @@ class SidecarHandler(BaseHTTPRequestHandler):
             cur.execute("DELETE FROM mentions WHERE id = %s", (mention_id,))
         conn.commit()
         return {"ok": True}
+
+    def _post_inflect(self):
+        from littera.linguistics.dispatch import surface_form as dispatch_surface_form
+
+        body = self._read_json_body()
+        language = body.get("language", "en")
+        base_form = body.get("base_form", "")
+        features = body.get("features")
+        properties = body.get("properties")
+        if not base_form:
+            return {"error": "base_form required"}
+        result = dispatch_surface_form(language, base_form, features, properties)
+        return {"result": result}
+
+    def _put_mention_surface(self, mention_id: str):
+        from littera.linguistics.dispatch import surface_form as dispatch_surface_form
+
+        body = self._read_json_body()
+        features = body.get("features", {})
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            # Look up mention → entity_id + language
+            cur.execute(
+                "SELECT entity_id, language FROM mentions WHERE id = %s",
+                (mention_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return {"error": "mention not found"}
+            entity_id, language = row
+
+            # Look up base_form from entity_labels for this language
+            cur.execute(
+                "SELECT base_form FROM entity_labels WHERE entity_id = %s AND language = %s",
+                (entity_id, language),
+            )
+            row = cur.fetchone()
+            if row:
+                base_form = row[0]
+            else:
+                # Fall back to canonical_label
+                cur.execute(
+                    "SELECT canonical_label FROM entities WHERE id = %s",
+                    (entity_id,),
+                )
+                row = cur.fetchone()
+                base_form = row[0] if row else "?"
+
+            # Fetch entity properties
+            cur.execute(
+                "SELECT properties FROM entities WHERE id = %s",
+                (entity_id,),
+            )
+            row = cur.fetchone()
+            properties = row[0] if row and row[0] else None
+
+            result = dispatch_surface_form(language, base_form, features or None, properties)
+
+            cur.execute(
+                "UPDATE mentions SET surface_form = %s, features = %s WHERE id = %s",
+                (result, json.dumps(features) if features else None, mention_id),
+            )
+        conn.commit()
+        return {"ok": True, "surface_form": result}
 
     def _put_entity_note(self, entity_id: str):
         body = self._read_json_body()

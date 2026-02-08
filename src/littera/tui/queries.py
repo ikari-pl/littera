@@ -354,12 +354,12 @@ def fetch_block_text(db, block_id: str) -> tuple[str, str]:
     return row[0], row[1]
 
 
-def fetch_block_mentions(db, block_id: str) -> list[tuple[str, str, str, str]]:
-    """Return list of (mention_id, entity_type, entity_label, language) for a block."""
+def fetch_block_mentions(db, block_id: str) -> list[tuple[str, str, str, str, str | None]]:
+    """Return list of (mention_id, entity_type, entity_label, language, surface_form) for a block."""
     with db.cursor() as cur:
         cur.execute(
             """
-            SELECT m.id, e.entity_type, e.canonical_label, m.language
+            SELECT m.id, e.entity_type, e.canonical_label, m.language, m.surface_form
             FROM mentions m
             JOIN entities e ON e.id = m.entity_id
             WHERE m.block_id = %s
@@ -368,7 +368,7 @@ def fetch_block_mentions(db, block_id: str) -> list[tuple[str, str, str, str]]:
             (block_id,),
         )
         return [
-            (str(r[0]), r[1], r[2] or "(unnamed)", r[3])
+            (str(r[0]), r[1], r[2] or "(unnamed)", r[3], r[4])
             for r in cur.fetchall()
         ]
 

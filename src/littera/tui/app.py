@@ -88,6 +88,7 @@ class LitteraApp(App):
         ("A", "alignments", "Alignments"),
         ("g", "show_gaps", "Show Gaps"),
         ("R", "reviews", "Reviews"),
+        ("S", "set_surface", "Set Surface"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -743,10 +744,13 @@ class LitteraApp(App):
             return
 
         lines = ["Mentions for this block:", ""]
-        for i, (mid, etype, elabel, lang) in enumerate(mentions, 1):
-            lines.append(f"  {i}. {etype} {elabel} ({lang})")
+        for i, (mid, etype, elabel, lang, sform) in enumerate(mentions, 1):
+            line = f"  {i}. {etype} {elabel} ({lang})"
+            if sform:
+                line += f' surface: "{sform}"'
+            lines.append(line)
         lines.append("")
-        lines.append("ctrl+shift+d: delete mention by number")
+        lines.append("ctrl+shift+d: delete mention  S: set surface")
 
         self.state.outline.detail = "\n".join(lines)
         self._render_view()
@@ -782,6 +786,112 @@ class LitteraApp(App):
             InputDialog("Delete Mention", f"Mention # (1-{len(mentions)}):", ""),
             on_num_result,
         )
+
+    @safe_action
+    def action_set_surface(self) -> None:
+        """Set surface form on a mention in the selected block."""
+        if self.state is None or self.state.view != "outline":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "block" or not sel.id:
+            return
+
+        block_id = sel.id
+        mentions = queries.fetch_block_mentions(self.state.db, block_id)
+        if not mentions:
+            self.notify("No mentions for this block")
+            return
+
+        async def on_num_result(num_str: str | None) -> None:
+            if not num_str or not num_str.isdigit():
+                return
+            idx = int(num_str)
+            if idx < 1 or idx > len(mentions):
+                self.notify(f"Invalid mention number (1-{len(mentions)})", severity="warning")
+                return
+
+            mention_id, _etype, _elabel, language, _sform = mentions[idx - 1]
+
+            async def on_features_result(features_str: str | None) -> None:
+                if not features_str:
+                    return
+                self._apply_surface_form(mention_id, language, features_str)
+
+            self.push_screen(
+                InputDialog("Set Surface", "Features (e.g. plural, case=gen):", ""),
+                on_features_result,
+            )
+
+        self.push_screen(
+            InputDialog("Set Surface", f"Mention # (1-{len(mentions)}):", ""),
+            on_num_result,
+        )
+
+    @safe_action
+    def _apply_surface_form(self, mention_id: str, language: str, features_str: str) -> None:
+        """Parse features, compute surface form, and update mention."""
+        import json
+        from littera.linguistics.dispatch import surface_form as dispatch_surface_form
+
+        # Parse features string
+        features: dict = {}
+        for token in features_str.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if token == "plural":
+                features["number"] = "pl"
+            elif token == "possessive":
+                features["case"] = "poss"
+            elif "=" in token:
+                key, value = token.split("=", 1)
+                features[key.strip()] = value.strip()
+
+        with self.state.db.cursor() as cur:
+            # Get entity_id for this mention
+            cur.execute(
+                "SELECT entity_id FROM mentions WHERE id = %s",
+                (mention_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return
+            entity_id = row[0]
+
+            # Look up base_form from entity_labels for this language
+            cur.execute(
+                "SELECT base_form FROM entity_labels WHERE entity_id = %s AND language = %s",
+                (entity_id, language),
+            )
+            row = cur.fetchone()
+            if row:
+                base_form = row[0]
+            else:
+                # Fall back to canonical_label
+                cur.execute(
+                    "SELECT canonical_label FROM entities WHERE id = %s",
+                    (entity_id,),
+                )
+                row = cur.fetchone()
+                base_form = row[0] if row else "?"
+
+            # Fetch entity properties
+            cur.execute(
+                "SELECT properties FROM entities WHERE id = %s",
+                (entity_id,),
+            )
+            row = cur.fetchone()
+            properties = row[0] if row and row[0] else None
+
+            result = dispatch_surface_form(language, base_form, features or None, properties)
+
+            cur.execute(
+                "UPDATE mentions SET surface_form = %s, features = %s WHERE id = %s",
+                (result, json.dumps(features) if features else None, mention_id),
+            )
+        self.state.db.commit()
+        self.notify(f'Surface form set: "{result}"')
+        self._render_view()
 
     # =====================
     # Editing
