@@ -22,6 +22,48 @@ const { invoke } = window.__TAURI__.core;
 const store = createStore(reduce, initialState);
 
 // ---------------------------------------------------------------------------
+// Error auto-dismiss timer
+// ---------------------------------------------------------------------------
+
+let errorDismissTimer = null;
+
+function scheduleErrorDismiss(delay = 5000) {
+  if (errorDismissTimer) clearTimeout(errorDismissTimer);
+  errorDismissTimer = setTimeout(() => {
+    store.dispatch({ type: "clear-error" });
+    errorDismissTimer = null;
+  }, delay);
+}
+
+// ---------------------------------------------------------------------------
+// Retry wrapper for transient sidecar failures
+// ---------------------------------------------------------------------------
+
+async function withRetry(fn, retries = 2, delay = 1000) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isTransient = isTransientError(err);
+      if (attempt < retries && isTransient) {
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+function isTransientError(err) {
+  const msg = err.message || '';
+  return msg.includes('Failed to fetch') ||
+         msg.includes('NetworkError') ||
+         msg.includes('ECONNREFUSED') ||
+         msg.includes('HTTP 502') ||
+         msg.includes('HTTP 503');
+}
+
+// ---------------------------------------------------------------------------
 // Theme management
 // ---------------------------------------------------------------------------
 
@@ -136,6 +178,16 @@ const pickerHandlers = {
       store.dispatch({ type: "picker-error", message: String(err) });
     }
   },
+
+  async onRetryPicker() {
+    store.dispatch({ type: "clear-error" });
+    try {
+      const data = await invoke("get_picker_data");
+      store.dispatch({ type: "set-picker-data", data });
+    } catch (err) {
+      store.dispatch({ type: "picker-error", message: `Failed to load: ${err}` });
+    }
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +197,15 @@ const pickerHandlers = {
 const handlers = {
   // Picker handlers (merged in)
   ...pickerHandlers,
+
+  // Dismiss error banner
+  onDismissError() {
+    if (errorDismissTimer) {
+      clearTimeout(errorDismissTimer);
+      errorDismissTimer = null;
+    }
+    store.dispatch({ type: "clear-error" });
+  },
 
   // Command palette handlers
   onClosePalette() {
@@ -420,16 +481,16 @@ async function loadLevel() {
 
   try {
     if (state.path.length === 0) {
-      const docs = await api.fetchDocuments(port);
+      const docs = await withRetry(() => api.fetchDocuments(port));
       store.dispatch({ type: "set-items", items: docs });
     } else {
       const last = state.path[state.path.length - 1];
 
       if (last.kind === "document") {
-        const sections = await api.fetchSections(port, last.id);
+        const sections = await withRetry(() => api.fetchSections(port, last.id));
         store.dispatch({ type: "set-items", items: sections });
       } else if (last.kind === "section") {
-        const blocks = await api.fetchBlocks(port, last.id);
+        const blocks = await withRetry(() => api.fetchBlocks(port, last.id));
 
         // Sidebar items
         store.dispatch({ type: "set-items", items: blocks.map(b => ({
@@ -461,7 +522,7 @@ async function loadEntities() {
 
   store.dispatch({ type: "loading" });
   try {
-    const entities = await api.fetchEntities(port);
+    const entities = await withRetry(() => api.fetchEntities(port));
     store.dispatch({ type: "set-entities", entities });
   } catch (err) {
     store.dispatch({ type: "error", message: err.message });
@@ -473,7 +534,7 @@ async function loadEntityDetail(entityId) {
   if (!port) return;
 
   try {
-    const detail = await api.fetchEntity(port, entityId);
+    const detail = await withRetry(() => api.fetchEntity(port, entityId));
     store.dispatch({ type: "set-entity-detail", detail });
   } catch (err) {
     store.dispatch({ type: "error", message: err.message });
@@ -486,6 +547,14 @@ async function loadEntityDetail(entityId) {
 
 store.subscribe((state) => {
   render(state, handlers);
+
+  // Auto-dismiss errors after 5s
+  if (state.error) {
+    scheduleErrorDismiss();
+  } else if (errorDismissTimer) {
+    clearTimeout(errorDismissTimer);
+    errorDismissTimer = null;
+  }
 
   // Editor lifecycle is only relevant in the ready phase
   if (state.phase !== "ready") return;
@@ -618,7 +687,10 @@ document.addEventListener("keydown", async (e) => {
       });
       store.dispatch({ type: "set-items", items });
     } catch (err) {
-      store.dispatch({ type: "error", message: `Save failed: ${err.message}` });
+      const errMsg = isTransientError(err)
+        ? "Save failed \u2014 connection lost. Try again with Cmd+S."
+        : `Save failed: ${err.message}`;
+      store.dispatch({ type: "error", message: errMsg });
     }
   }
 });
