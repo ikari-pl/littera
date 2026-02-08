@@ -381,6 +381,36 @@ const handlers = {
     }
   },
 
+  onStartAddProperty() {
+    store.dispatch({ type: "start-add-property" });
+  },
+
+  onCancelAddProperty() {
+    store.dispatch({ type: "stop-add-property" });
+  },
+
+  async onAddProperty(entityId, key, value) {
+    store.dispatch({ type: "stop-add-property" });
+    if (!key || !value) return;
+    const port = store.getState().sidecarPort;
+    try {
+      await api.setEntityProperties(port, entityId, { [key]: value });
+      await loadEntityDetail(entityId);
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onDeleteProperty(entityId, key) {
+    const port = store.getState().sidecarPort;
+    try {
+      await api.deleteEntityProperty(port, entityId, key);
+      await loadEntityDetail(entityId);
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onEditEntityNote(entityId) {
     const state = store.getState();
     const port = state.sidecarPort;

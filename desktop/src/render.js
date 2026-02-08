@@ -445,7 +445,7 @@ function renderContent(state, handlers) {
 
   // Entity detail view
   if (state.view === "entities" && state.entityDetail) {
-    const detailWithId = { ...state.entityDetail, _entityId: state.selectedEntityId, _addingLabel: state.addingLabel };
+    const detailWithId = { ...state.entityDetail, _entityId: state.selectedEntityId, _addingLabel: state.addingLabel, _addingProperty: state.addingProperty };
     renderEntityDetail(el, detailWithId, handlers);
     return;
   }
@@ -681,6 +681,140 @@ function renderEntityDetail(el, detail, handlers) {
 
       // Auto-focus after DOM insertion
       requestAnimationFrame(() => input.focus());
+    }
+
+    el.appendChild(section);
+  }
+
+  // Properties
+  {
+    const section = document.createElement("div");
+    section.className = "entity-section";
+
+    const propHeader = document.createElement("div");
+    propHeader.className = "entity-section-header";
+    const propH3 = document.createElement("h3");
+    propH3.textContent = "Properties";
+    propHeader.appendChild(propH3);
+
+    if (handlers && handlers.onStartAddProperty) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "entity-action-btn";
+      addBtn.textContent = "Add";
+      addBtn.addEventListener("click", () => handlers.onStartAddProperty());
+      propHeader.appendChild(addBtn);
+    }
+    section.appendChild(propHeader);
+
+    const props = detail.properties || {};
+    const keys = Object.keys(props);
+
+    if (keys.length > 0) {
+      for (const key of keys) {
+        const row = document.createElement("div");
+        row.className = "entity-property-row";
+
+        const keyBadge = document.createElement("span");
+        keyBadge.className = "entity-property-key";
+        keyBadge.textContent = key;
+        row.appendChild(keyBadge);
+
+        const valueSpan = document.createElement("span");
+        valueSpan.className = "entity-property-value";
+        valueSpan.textContent = props[key];
+        row.appendChild(valueSpan);
+
+        if (handlers && handlers.onDeleteProperty) {
+          const delBtn = document.createElement("button");
+          delBtn.className = "entity-property-delete-btn";
+          delBtn.textContent = "\u00d7";
+          delBtn.title = "Delete property";
+          delBtn.addEventListener("click", () => handlers.onDeleteProperty(detail._entityId, key));
+          row.appendChild(delBtn);
+        }
+
+        section.appendChild(row);
+      }
+    } else if (!detail._addingProperty) {
+      const empty = document.createElement("p");
+      empty.className = "entity-note-empty";
+      empty.textContent = "(no properties)";
+      section.appendChild(empty);
+    }
+
+    // Inline add row
+    if (detail._addingProperty) {
+      const addRow = document.createElement("div");
+      addRow.className = "entity-property-add-row";
+
+      const keyInput = document.createElement("input");
+      keyInput.type = "text";
+      keyInput.className = "entity-property-add-input";
+      keyInput.placeholder = "Key\u2026";
+      keyInput.style.maxWidth = "120px";
+
+      const valueInput = document.createElement("input");
+      valueInput.type = "text";
+      valueInput.className = "entity-property-add-input";
+      valueInput.placeholder = "Value\u2026";
+
+      let cancelled = false;
+
+      function handleSave() {
+        const k = keyInput.value.trim();
+        const v = valueInput.value.trim();
+        if (handlers.onAddProperty) {
+          handlers.onAddProperty(detail._entityId, k, v);
+        }
+      }
+
+      function handleCancel() {
+        cancelled = true;
+        if (handlers.onCancelAddProperty) {
+          handlers.onCancelAddProperty();
+        }
+      }
+
+      function onKeydown(e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleSave();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          handleCancel();
+        }
+      }
+
+      keyInput.addEventListener("keydown", onKeydown);
+      valueInput.addEventListener("keydown", onKeydown);
+
+      // Cancel on blur if both empty
+      valueInput.addEventListener("blur", () => {
+        setTimeout(() => {
+          if (!cancelled && !keyInput.value.trim() && !valueInput.value.trim()) {
+            // Check if focus is still within the add row
+            if (!addRow.contains(document.activeElement)) {
+              handleCancel();
+            }
+          }
+        }, 100);
+      });
+
+      keyInput.addEventListener("blur", () => {
+        setTimeout(() => {
+          if (!cancelled && !keyInput.value.trim() && !valueInput.value.trim()) {
+            if (!addRow.contains(document.activeElement)) {
+              handleCancel();
+            }
+          }
+        }, 100);
+      });
+
+      addRow.appendChild(keyInput);
+      addRow.appendChild(valueInput);
+      section.appendChild(addRow);
+
+      requestAnimationFrame(() => keyInput.focus());
     }
 
     el.appendChild(section);

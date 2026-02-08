@@ -32,6 +32,7 @@ export const initialState = {
   zenMode: false,          // distraction-free mode (hides sidebar/chrome)
   // Entity label add mode
   addingLabel: false,
+  addingProperty: false,
   commandPaletteOpen: false, // Cmd+K command palette
   theme: null,             // null = system, "light", "dark"
 };
@@ -119,7 +120,7 @@ export function reduce(state, action) {
       return { ...state, entities: action.entities, loading: false };
 
     case "select-entity":
-      return { ...state, selectedEntityId: action.id, addingLabel: false };
+      return { ...state, selectedEntityId: action.id, addingLabel: false, addingProperty: false };
 
     case "set-entity-detail":
       return { ...state, entityDetail: action.detail, loading: false };
@@ -151,6 +152,7 @@ export function reduce(state, action) {
         dirty: false,
         zenMode: false,
         addingLabel: false,
+        addingProperty: false,
       };
 
     case "editor-mark-dirty":
@@ -173,6 +175,12 @@ export function reduce(state, action) {
 
     case "stop-add-label":
       return { ...state, addingLabel: false };
+
+    case "start-add-property":
+      return { ...state, addingProperty: true };
+
+    case "stop-add-property":
+      return { ...state, addingProperty: false };
 
     case "open-command-palette":
       return { ...state, commandPaletteOpen: true };

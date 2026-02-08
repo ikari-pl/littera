@@ -41,6 +41,9 @@ ROUTES = [
     (re.compile(r"^/api/blocks$"), "POST", "_post_block"),
     (re.compile(r"^/api/entities$"), "GET", "_get_entities"),
     (re.compile(r"^/api/entities$"), "POST", "_post_entity"),
+    (re.compile(r"^/api/entities/([^/]+)/properties/([^/]+)$"), "DELETE", "_delete_entity_property"),
+    (re.compile(r"^/api/entities/([^/]+)/properties$"), "GET", "_get_entity_properties"),
+    (re.compile(r"^/api/entities/([^/]+)/properties$"), "PUT", "_put_entity_properties"),
     (re.compile(r"^/api/entities/([^/]+)$"), "GET", "_get_entity"),
     (re.compile(r"^/api/entities/([^/]+)$"), "DELETE", "_delete_entity"),
     (re.compile(r"^/api/entities/([^/]+)/note$"), "PUT", "_put_entity_note"),
@@ -144,13 +147,13 @@ class SidecarHandler(BaseHTTPRequestHandler):
         conn = self.work_db.conn
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT entity_type, canonical_label FROM entities WHERE id = %s",
+                "SELECT entity_type, canonical_label, properties FROM entities WHERE id = %s",
                 (entity_id,),
             )
             row = cur.fetchone()
             if row is None:
                 return {"error": "not found"}
-            entity_type, name = row
+            entity_type, name, props = row
 
             # Work-scoped note
             work_id = self.work_db.cfg.get("work", {}).get("id")
@@ -211,6 +214,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 "entity_type": entity_type,
                 "label": name or "(unnamed)",
                 "labels": labels,
+                "properties": props or {},
                 "mentions": mentions,
                 "note": note,
             }
@@ -434,6 +438,43 @@ class SidecarHandler(BaseHTTPRequestHandler):
         conn = self.work_db.conn
         with conn.cursor() as cur:
             cur.execute("DELETE FROM entity_labels WHERE id = %s", (label_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _get_entity_properties(self, entity_id: str):
+        with self.work_db.conn.cursor() as cur:
+            cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+            row = cur.fetchone()
+            if row is None:
+                return {"error": "not found"}
+            return row[0] or {}
+
+    def _put_entity_properties(self, entity_id: str):
+        body = self._read_json_body()
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+            row = cur.fetchone()
+            if row is None:
+                return {"error": "not found"}
+            props = row[0] or {}
+            props.update(body)
+            cur.execute("UPDATE entities SET properties = %s WHERE id = %s",
+                        (json.dumps(props), entity_id))
+        conn.commit()
+        return {"ok": True}
+
+    def _delete_entity_property(self, entity_id: str, key: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+            row = cur.fetchone()
+            if row is None:
+                return {"error": "not found"}
+            props = row[0] or {}
+            props.pop(key, None)
+            cur.execute("UPDATE entities SET properties = %s WHERE id = %s",
+                        (json.dumps(props) if props else None, entity_id))
         conn.commit()
         return {"ok": True}
 

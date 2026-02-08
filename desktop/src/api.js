@@ -132,3 +132,15 @@ export function addEntityLabel(port, entityId, language, baseForm, aliases) {
 export function deleteLabel(port, labelId) {
   return del(port, `/api/labels/${labelId}`);
 }
+
+export function fetchEntityProperties(port, entityId) {
+  return get(port, `/api/entities/${entityId}/properties`);
+}
+
+export function setEntityProperties(port, entityId, properties) {
+  return put(port, `/api/entities/${entityId}/properties`, properties);
+}
+
+export function deleteEntityProperty(port, entityId, key) {
+  return del(port, `/api/entities/${entityId}/properties/${key}`);
+}
