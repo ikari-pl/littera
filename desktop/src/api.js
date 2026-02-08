@@ -124,3 +124,11 @@ export function deleteMention(port, mentionId) {
 export function saveEntityNote(port, entityId, note) {
   return put(port, `/api/entities/${entityId}/note`, { note });
 }
+
+export function addEntityLabel(port, entityId, language, baseForm, aliases) {
+  return post(port, `/api/entities/${entityId}/labels`, { language, base_form: baseForm, aliases });
+}
+
+export function deleteLabel(port, labelId) {
+  return del(port, `/api/labels/${labelId}`);
+}

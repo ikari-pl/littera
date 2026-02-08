@@ -30,6 +30,8 @@ export const initialState = {
   savedDoc: null,          // ProseMirror doc at last save (for dirty tracking)
   dirty: false,            // unsaved changes exist
   zenMode: false,          // distraction-free mode (hides sidebar/chrome)
+  // Entity label add mode
+  addingLabel: false,
 };
 
 export function reduce(state, action) {
@@ -115,7 +117,7 @@ export function reduce(state, action) {
       return { ...state, entities: action.entities, loading: false };
 
     case "select-entity":
-      return { ...state, selectedEntityId: action.id };
+      return { ...state, selectedEntityId: action.id, addingLabel: false };
 
     case "set-entity-detail":
       return { ...state, entityDetail: action.detail, loading: false };
@@ -146,6 +148,7 @@ export function reduce(state, action) {
         savedDoc: null,
         dirty: false,
         zenMode: false,
+        addingLabel: false,
       };
 
     case "editor-mark-dirty":
@@ -162,6 +165,12 @@ export function reduce(state, action) {
 
     case "toggle-zen":
       return { ...state, zenMode: !state.zenMode };
+
+    case "start-add-label":
+      return { ...state, addingLabel: true };
+
+    case "stop-add-label":
+      return { ...state, addingLabel: false };
 
     default:
       return state;

@@ -440,7 +440,7 @@ function renderContent(state, handlers) {
 
   // Entity detail view
   if (state.view === "entities" && state.entityDetail) {
-    const detailWithId = { ...state.entityDetail, _entityId: state.selectedEntityId };
+    const detailWithId = { ...state.entityDetail, _entityId: state.selectedEntityId, _addingLabel: state.addingLabel };
     renderEntityDetail(el, detailWithId, handlers);
     return;
   }
@@ -576,20 +576,108 @@ function renderEntityDetail(el, detail, handlers) {
   el.appendChild(header);
 
   // Labels
-  if (detail.labels && detail.labels.length > 0) {
+  {
     const section = document.createElement("div");
     section.className = "entity-section";
-    section.innerHTML = "<h3>Labels</h3>";
 
-    for (const label of detail.labels) {
-      const row = document.createElement("div");
-      row.className = "entity-label-row";
-      row.innerHTML = `<span class="lang-badge">${escapeHtml(label.language)}</span> ${escapeHtml(label.base_form)}`;
-      if (label.aliases) {
-        row.innerHTML += ` <span class="entity-aliases">(${escapeHtml(label.aliases)})</span>`;
-      }
-      section.appendChild(row);
+    const labelHeader = document.createElement("div");
+    labelHeader.className = "entity-section-header";
+    const labelH3 = document.createElement("h3");
+    labelH3.textContent = "Labels";
+    labelHeader.appendChild(labelH3);
+
+    if (handlers && handlers.onStartAddLabel) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "entity-action-btn";
+      addBtn.textContent = "Add";
+      addBtn.addEventListener("click", () => handlers.onStartAddLabel());
+      labelHeader.appendChild(addBtn);
     }
+    section.appendChild(labelHeader);
+
+    if (detail.labels && detail.labels.length > 0) {
+      for (const label of detail.labels) {
+        const row = document.createElement("div");
+        row.className = "entity-label-row";
+
+        const langBadge = document.createElement("span");
+        langBadge.className = "lang-badge";
+        langBadge.textContent = label.language;
+        row.appendChild(langBadge);
+
+        const text = document.createTextNode(" " + label.base_form);
+        row.appendChild(text);
+
+        if (label.aliases) {
+          const aliasSpan = document.createElement("span");
+          aliasSpan.className = "entity-aliases";
+          aliasSpan.textContent = " (" + label.aliases + ")";
+          row.appendChild(aliasSpan);
+        }
+
+        if (handlers && handlers.onDeleteLabel) {
+          const delBtn = document.createElement("button");
+          delBtn.className = "entity-label-delete-btn";
+          delBtn.textContent = "\u00d7";
+          delBtn.title = "Delete label";
+          delBtn.addEventListener("click", () => handlers.onDeleteLabel(label.id));
+          row.appendChild(delBtn);
+        }
+
+        section.appendChild(row);
+      }
+    }
+
+    // Inline add row
+    if (detail._addingLabel) {
+      const addRow = document.createElement("div");
+      addRow.className = "entity-label-add-row";
+
+      const langSelect = document.createElement("select");
+      langSelect.className = "entity-label-lang-select";
+      for (const lang of ["en", "ja", "fr", "de", "es", "it", "pt", "zh", "ko", "ru"]) {
+        const opt = document.createElement("option");
+        opt.value = lang;
+        opt.textContent = lang;
+        langSelect.appendChild(opt);
+      }
+      addRow.appendChild(langSelect);
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "entity-label-add-input";
+      input.placeholder = "Base form\u2026";
+
+      let cancelled = false;
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (handlers.onAddLabel) {
+            handlers.onAddLabel(detail._entityId, langSelect.value, input.value.trim());
+          }
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelled = true;
+          if (handlers.onCancelAddLabel) {
+            handlers.onCancelAddLabel();
+          }
+        }
+      });
+      input.addEventListener("blur", () => {
+        if (!cancelled && !input.value.trim()) {
+          if (handlers.onCancelAddLabel) {
+            handlers.onCancelAddLabel();
+          }
+        }
+      });
+      addRow.appendChild(input);
+
+      section.appendChild(addRow);
+
+      // Auto-focus after DOM insertion
+      requestAnimationFrame(() => input.focus());
+    }
+
     el.appendChild(section);
   }
 

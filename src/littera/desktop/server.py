@@ -44,6 +44,8 @@ ROUTES = [
     (re.compile(r"^/api/entities/([^/]+)$"), "GET", "_get_entity"),
     (re.compile(r"^/api/entities/([^/]+)$"), "DELETE", "_delete_entity"),
     (re.compile(r"^/api/entities/([^/]+)/note$"), "PUT", "_put_entity_note"),
+    (re.compile(r"^/api/entities/([^/]+)/labels$"), "POST", "_post_entity_label"),
+    (re.compile(r"^/api/labels/([^/]+)$"), "DELETE", "_delete_label"),
     (re.compile(r"^/api/mentions/([^/]+)$"), "DELETE", "_delete_mention"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
     (re.compile(r"^/health$"), "GET", "_health"),
@@ -168,7 +170,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
             # Labels
             cur.execute(
                 """
-                SELECT language, base_form, aliases
+                SELECT id, language, base_form, aliases
                 FROM entity_labels
                 WHERE entity_id = %s
                 ORDER BY language
@@ -176,7 +178,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 (entity_id,),
             )
             labels = [
-                {"language": r[0], "base_form": r[1], "aliases": r[2]}
+                {"id": str(r[0]), "language": r[1], "base_form": r[2], "aliases": r[3]}
                 for r in cur.fetchall()
             ]
 
@@ -407,6 +409,31 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 """,
                 (entity_id, work_id, json.dumps({"note": note})),
             )
+        conn.commit()
+        return {"ok": True}
+
+    def _post_entity_label(self, entity_id: str):
+        body = self._read_json_body()
+        language = body.get("language", "en")
+        base_form = body.get("base_form", "")
+        aliases = body.get("aliases")
+        if not base_form:
+            return {"error": "base_form required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO entity_labels (entity_id, language, base_form, aliases) "
+                "VALUES (%s, %s, %s, %s) RETURNING id",
+                (entity_id, language, base_form, json.dumps(aliases) if aliases else None),
+            )
+            label_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": label_id}
+
+    def _delete_label(self, label_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM entity_labels WHERE id = %s", (label_id,))
         conn.commit()
         return {"ok": True}
 
