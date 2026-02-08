@@ -11,11 +11,13 @@ export const initialState = {
   pickerData: null,        // { recent, workspace_works, workspace }
   pickerError: null,
   // Main app state
-  view: "outline",        // "outline" | "entities"
+  view: "outline",        // "outline" | "entities" | "alignments" | "reviews"
   path: [],               // [{kind, id, title}, ...]
   items: [],              // current sidebar list items
   selectedId: null,
   detail: null,           // content area data
+  alignments: [],
+  reviews: [],
   entities: [],
   selectedEntityId: null,
   entityDetail: null,
@@ -121,6 +123,12 @@ export function reduce(state, action) {
 
     case "select-entity":
       return { ...state, selectedEntityId: action.id, addingLabel: false, addingProperty: false };
+
+    case "set-alignments":
+      return { ...state, alignments: action.alignments, loading: false };
+
+    case "set-reviews":
+      return { ...state, reviews: action.reviews, loading: false };
 
     case "set-entity-detail":
       return { ...state, entityDetail: action.detail, loading: false };

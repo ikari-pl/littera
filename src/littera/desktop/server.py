@@ -50,6 +50,12 @@ ROUTES = [
     (re.compile(r"^/api/entities/([^/]+)/labels$"), "POST", "_post_entity_label"),
     (re.compile(r"^/api/labels/([^/]+)$"), "DELETE", "_delete_label"),
     (re.compile(r"^/api/mentions/([^/]+)$"), "DELETE", "_delete_mention"),
+    (re.compile(r"^/api/alignments$"), "GET", "_get_alignments"),
+    (re.compile(r"^/api/alignments$"), "POST", "_post_alignment"),
+    (re.compile(r"^/api/alignments/([^/]+)$"), "DELETE", "_delete_alignment"),
+    (re.compile(r"^/api/reviews$"), "GET", "_get_reviews"),
+    (re.compile(r"^/api/reviews$"), "POST", "_post_review"),
+    (re.compile(r"^/api/reviews/([^/]+)$"), "DELETE", "_delete_review"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
     (re.compile(r"^/health$"), "GET", "_health"),
 ]
@@ -475,6 +481,129 @@ class SidecarHandler(BaseHTTPRequestHandler):
             props.pop(key, None)
             cur.execute("UPDATE entities SET properties = %s WHERE id = %s",
                         (json.dumps(props) if props else None, entity_id))
+        conn.commit()
+        return {"ok": True}
+
+    # -----------------------------------------------------------------
+    # Alignment handlers
+    # -----------------------------------------------------------------
+
+    def _get_alignments(self):
+        """List all alignments with block details."""
+        with self.work_db.conn.cursor() as cur:
+            cur.execute("""
+                SELECT a.id, a.alignment_type,
+                       sb.id, sb.language, sb.source_text,
+                       tb.id, tb.language, tb.source_text
+                FROM block_alignments a
+                JOIN blocks sb ON sb.id = a.source_block_id
+                JOIN blocks tb ON tb.id = a.target_block_id
+                ORDER BY a.created_at
+            """)
+            return [
+                {
+                    "id": str(r[0]),
+                    "alignment_type": r[1],
+                    "source": {
+                        "id": str(r[2]),
+                        "language": r[3],
+                        "preview": (r[4] or "").replace("\n", " ")[:80],
+                    },
+                    "target": {
+                        "id": str(r[5]),
+                        "language": r[6],
+                        "preview": (r[7] or "").replace("\n", " ")[:80],
+                    },
+                }
+                for r in cur.fetchall()
+            ]
+
+    def _post_alignment(self):
+        """Create an alignment between two blocks."""
+        body = self._read_json_body()
+        source_block_id = body.get("source_block_id")
+        target_block_id = body.get("target_block_id")
+        alignment_type = body.get("alignment_type", "translation")
+        if not source_block_id or not target_block_id:
+            return {"error": "source_block_id and target_block_id required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO block_alignments (source_block_id, target_block_id, alignment_type) "
+                "VALUES (%s, %s, %s) RETURNING id",
+                (source_block_id, target_block_id, alignment_type),
+            )
+            alignment_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": alignment_id}
+
+    def _delete_alignment(self, alignment_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM block_alignments WHERE id = %s", (alignment_id,))
+        conn.commit()
+        return {"ok": True}
+
+    # -----------------------------------------------------------------
+    # Review handlers
+    # -----------------------------------------------------------------
+
+    def _get_reviews(self):
+        """List all reviews for the current work."""
+        work_id = self.work_db.cfg.get("work", {}).get("id")
+        with self.work_db.conn.cursor() as cur:
+            if work_id:
+                cur.execute("""
+                    SELECT id, scope, scope_id, issue_type, description, severity, created_at
+                    FROM reviews
+                    WHERE work_id = %s
+                    ORDER BY created_at DESC
+                """, (work_id,))
+            else:
+                cur.execute("""
+                    SELECT id, scope, scope_id, issue_type, description, severity, created_at
+                    FROM reviews
+                    ORDER BY created_at DESC
+                """)
+            return [
+                {
+                    "id": str(r[0]),
+                    "scope": r[1],
+                    "scope_id": str(r[2]) if r[2] else None,
+                    "issue_type": r[3],
+                    "description": r[4],
+                    "severity": r[5],
+                    "created_at": r[6].isoformat() if r[6] else None,
+                }
+                for r in cur.fetchall()
+            ]
+
+    def _post_review(self):
+        """Create a review."""
+        body = self._read_json_body()
+        description = body.get("description")
+        if not description:
+            return {"error": "description required"}
+        work_id = self.work_db.cfg.get("work", {}).get("id")
+        scope = body.get("scope")
+        scope_id = body.get("scope_id")
+        issue_type = body.get("issue_type")
+        severity = body.get("severity", "medium")
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO reviews (work_id, scope, scope_id, issue_type, description, severity) "
+                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                (work_id, scope, scope_id, issue_type, description, severity),
+            )
+            review_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": review_id}
+
+    def _delete_review(self, review_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM reviews WHERE id = %s", (review_id,))
         conn.commit()
         return {"ok": True}
 

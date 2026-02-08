@@ -144,3 +144,33 @@ export function setEntityProperties(port, entityId, properties) {
 export function deleteEntityProperty(port, entityId, key) {
   return del(port, `/api/entities/${entityId}/properties/${key}`);
 }
+
+// Alignments
+export function fetchAlignments(port) {
+  return get(port, "/api/alignments");
+}
+
+export function createAlignment(port, sourceBlockId, targetBlockId, type) {
+  return post(port, "/api/alignments", {
+    source_block_id: sourceBlockId,
+    target_block_id: targetBlockId,
+    alignment_type: type || "translation",
+  });
+}
+
+export function deleteAlignment(port, alignmentId) {
+  return del(port, `/api/alignments/${alignmentId}`);
+}
+
+// Reviews
+export function fetchReviews(port) {
+  return get(port, "/api/reviews");
+}
+
+export function createReview(port, description, opts = {}) {
+  return post(port, "/api/reviews", { description, ...opts });
+}
+
+export function deleteReview(port, reviewId) {
+  return del(port, `/api/reviews/${reviewId}`);
+}
