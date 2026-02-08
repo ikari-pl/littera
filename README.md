@@ -27,18 +27,22 @@ Littera is intentionally multi‑interface. Each interface optimizes for a diffe
 - **CLI** — The source of truth
   - Scriptable, idempotent, fully test‑covered
   - Expresses the complete model without abstraction
+  - Import/export (JSON and Markdown)
 
 - **TUI** — Semantic navigation and focused editing
-  - Structure‑first exploration
-  - Meaning made visible
-  - Keyboard‑driven, mode‑aware
+  - Structure‑first exploration with drill‑down outline
+  - Entity labels, properties, mentions, and surface forms
+  - Alignment CRUD with gap detection
+  - Keyboard‑driven: 70+ bindings, inline rename, reordering
 
 - **Desktop App** — Immersive writing
   - Tauri shell with Python sidecar and embedded PostgreSQL
   - ProseMirror rich‑text editor with block‑level structure
   - Entity mentions, slash commands, bubble toolbar
+  - Command palette, theme toggle, distraction‑free mode
   - Work directory picker with recent works and workspace support
-  - Designed for flow, not administration
+  - Alignment gap detection and inflect preview
+  - Import/export via sidecar API
 
 The CLI defines reality. Other interfaces translate it.
 
@@ -61,14 +65,16 @@ Littera is not:
 
 ## Project Status
 
-Littera's core is stable and all three interfaces are functional:
+Littera's core is stable and all three interfaces have near‑complete feature parity:
 
 - Embedded PostgreSQL (local, real, tested)
 - Structured writing model (`Work → Document → Section → Block`)
-- Global semantic entities with work‑specific overlays
-- Authoritative CLI with full model coverage
-- TUI for semantic navigation and keyboard‑driven editing
-- Desktop app with rich‑text editor, entity mentions, and work picker
+- Global semantic entities with labels, properties, and work‑scoped notes
+- Entity mentions with language‑aware surface form generation (English morphology engine)
+- Block alignments with cross‑language gap detection
+- Reviews with severity and scope
+- Document and section reordering across all interfaces
+- Import/export in JSON and Markdown formats
 - Black‑box CLI tests with no mocks; Playwright test suite for the desktop app
 
 ---
