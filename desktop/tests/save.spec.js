@@ -96,6 +96,36 @@ test("tab switch while dirty → confirm dialog fires", async ({ page }) => {
   expect(dialogFired).toBe(true);
 });
 
+test("window close while dirty → beforeunload fires", async ({ page }) => {
+  await navToEditor(page);
+  const pm = page.locator(".ProseMirror");
+  await pm.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("unsaved close");
+
+  await expect(page.locator(".dirty-indicator")).toBeVisible();
+
+  // Check that beforeunload handler calls preventDefault
+  const prevented = await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+});
+
+test("window close while clean → no beforeunload warning", async ({ page }) => {
+  await navToEditor(page);
+
+  // No edits — should not prevent close
+  const prevented = await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(prevented).toBe(false);
+});
+
 test("sidebar block previews update after save", async ({ page }) => {
   await navToEditor(page);
   const pm = page.locator(".ProseMirror");

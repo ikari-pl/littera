@@ -338,6 +338,21 @@ store.subscribe((state) => {
 // Cmd+S save handler
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Warn on window/tab close with unsaved changes
+// ---------------------------------------------------------------------------
+
+window.addEventListener("beforeunload", (e) => {
+  const state = store.getState();
+  if (state.editing && state.dirty) {
+    e.preventDefault();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Cmd+S save handler
+// ---------------------------------------------------------------------------
+
 document.addEventListener("keydown", async (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "s") {
     e.preventDefault();
