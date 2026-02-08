@@ -452,6 +452,16 @@ window.addEventListener("beforeunload", (e) => {
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", async (e) => {
+  // Cmd+Shift+F: toggle zen mode (only while editing)
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f") {
+    e.preventDefault();
+    const state = store.getState();
+    if (state.editing) {
+      store.dispatch({ type: "toggle-zen" });
+    }
+    return;
+  }
+
   if ((e.metaKey || e.ctrlKey) && e.key === "s") {
     e.preventDefault();
 

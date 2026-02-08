@@ -1057,3 +1057,27 @@ body {
 @keyframes picker-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   Zen Mode (distraction-free)
+   ========================================================================== */
+
+.zen-mode {
+  grid-template-columns: 1fr;
+}
+
+.zen-mode #sidebar {
+  display: none;
+}
+
+.zen-mode #content {
+  padding: 3rem 2.5rem;
+}
+
+.zen-mode #prosemirror-editor {
+  max-width: 680px;
+}
+
+.zen-mode .dirty-indicator {
+  display: none;
+}
