@@ -20,7 +20,7 @@ from typing import Optional, Literal, Any, Union
 # =============================================================================
 
 ModeName = Literal["browse", "edit", "command"]
-ViewName = Literal["outline", "entities", "editor"]
+ViewName = Literal["outline", "entities", "editor", "alignments"]
 EditKind = Literal["entity_note", "block_text"]
 
 
@@ -76,6 +76,17 @@ class EntityItem:
     label: str
 
 
+@dataclass(frozen=True)
+class AlignmentItem:
+    """A single alignment in the alignments list."""
+    id: str
+    source_lang: str
+    source_preview: str
+    target_lang: str
+    target_preview: str
+    alignment_type: str
+
+
 # =============================================================================
 # View States
 # =============================================================================
@@ -94,6 +105,14 @@ class EntitiesState:
     """State for entities view."""
     selection: Selection = field(default_factory=Selection)
     items: list[EntityItem] = field(default_factory=list)
+    detail: str = ""
+
+
+@dataclass
+class AlignmentsState:
+    """State for alignments view."""
+    selection: Selection = field(default_factory=Selection)
+    items: list[AlignmentItem] = field(default_factory=list)
     detail: str = ""
 
 
@@ -117,6 +136,24 @@ class GotoOutline:
 @dataclass(frozen=True)
 class GotoEntities:
     """Switch to entities view."""
+    pass
+
+
+@dataclass(frozen=True)
+class GotoAlignments:
+    """Switch to alignments view."""
+    pass
+
+
+@dataclass(frozen=True)
+class AlignmentsSelect:
+    """Select an alignment."""
+    alignment_id: str
+
+
+@dataclass(frozen=True)
+class AlignmentsClearSelection:
+    """Clear alignment selection."""
     pass
 
 
@@ -181,6 +218,7 @@ class ExitEditor:
 Action = Union[
     GotoOutline,
     GotoEntities,
+    GotoAlignments,
     ClearSelection,
     OutlineSelect,
     OutlineClearSelection,
@@ -188,6 +226,8 @@ Action = Union[
     OutlinePop,
     EntitiesSelect,
     EntitiesClearSelection,
+    AlignmentsSelect,
+    AlignmentsClearSelection,
     StartEdit,
     ExitEditor,
 ]
@@ -213,11 +253,17 @@ def reduce(state: "AppState", action: Action) -> None:
             state.view = "entities"
             state.active_base = "entities"
 
+        case GotoAlignments():
+            state.view = "alignments"
+            state.active_base = "alignments"
+
         case ClearSelection():
             if state.view == "outline":
                 state.outline.selection = Selection()
             elif state.view == "entities":
                 state.entities.selection = Selection()
+            elif state.view == "alignments":
+                state.alignments.selection = Selection()
 
         case OutlineSelect(kind=kind, item_id=item_id):
             state.outline.selection = Selection(kind=kind, id=item_id)
@@ -239,6 +285,12 @@ def reduce(state: "AppState", action: Action) -> None:
 
         case EntitiesClearSelection():
             state.entities.selection = Selection()
+
+        case AlignmentsSelect(alignment_id=alignment_id):
+            state.alignments.selection = Selection(kind="alignment", id=alignment_id)
+
+        case AlignmentsClearSelection():
+            state.alignments.selection = Selection()
 
         case StartEdit(target=target, text=text, return_to=return_to):
             session = EditSession(
@@ -283,6 +335,7 @@ class AppState:
     # View-specific state
     outline: OutlineState = field(default_factory=OutlineState)
     entities: EntitiesState = field(default_factory=EntitiesState)
+    alignments: AlignmentsState = field(default_factory=AlignmentsState)
     editor: Optional[EditorOverlay] = None
 
     # Undo/redo state (scoped to edit sessions)

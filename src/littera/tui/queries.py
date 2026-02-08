@@ -8,7 +8,7 @@ Usage in app.py:
     queries.refresh_entities(state)  # before EntitiesView.render()
 """
 
-from littera.tui.state import AppState, OutlineItem, EntityItem
+from littera.tui.state import AppState, OutlineItem, EntityItem, AlignmentItem
 
 
 # =============================================================================
@@ -309,3 +309,160 @@ def fetch_item_title(db, kind: str, item_id: str) -> str:
             return "Untitled"
         row = cur.fetchone()
     return row[0] if row else "Untitled"
+
+
+# =============================================================================
+# Alignments
+# =============================================================================
+
+def refresh_alignments(state: AppState) -> None:
+    """Populate state.alignments.items from DB."""
+    items: list[AlignmentItem] = []
+    detail = "Select an alignment"
+
+    with state.db.cursor() as cur:
+        cur.execute("""
+            SELECT a.id, sb.language, sb.source_text,
+                   tb.language, tb.source_text, a.alignment_type
+            FROM block_alignments a
+            JOIN blocks sb ON sb.id = a.source_block_id
+            JOIN blocks tb ON tb.id = a.target_block_id
+            ORDER BY a.created_at
+        """)
+        for aid, sl, st, tl, tt, atype in cur.fetchall():
+            items.append(AlignmentItem(
+                id=str(aid),
+                source_lang=sl,
+                source_preview=st.replace("\n", " ")[:40],
+                target_lang=tl,
+                target_preview=tt.replace("\n", " ")[:40],
+                alignment_type=atype or "translation",
+            ))
+
+        # Detail for selected alignment
+        sel = state.alignments.selection
+        if sel and sel.kind == "alignment" and sel.id:
+            detail = _alignment_detail(cur, sel.id)
+
+    state.alignments.items = items
+    state.alignments.detail = detail
+
+
+def _alignment_detail(cur, alignment_id: str) -> str:
+    """Build detail string for a selected alignment."""
+    cur.execute(
+        """
+        SELECT a.alignment_type, a.confidence,
+               sb.language, sb.source_text,
+               tb.language, tb.source_text
+        FROM block_alignments a
+        JOIN blocks sb ON sb.id = a.source_block_id
+        JOIN blocks tb ON tb.id = a.target_block_id
+        WHERE a.id = %s
+        """,
+        (alignment_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return f"Alignment: {alignment_id}"
+
+    atype, confidence, src_lang, src_text, tgt_lang, tgt_text = row
+
+    lines = [
+        f"Type: {atype or 'translation'}",
+    ]
+    if confidence is not None:
+        lines.append(f"Confidence: {confidence}")
+    lines.append("")
+    lines.append(f"Source ({src_lang}):")
+    lines.append(src_text[:200])
+    lines.append("")
+    lines.append(f"Target ({tgt_lang}):")
+    lines.append(tgt_text[:200])
+    lines.append("")
+    lines.append("d: delete  g: show gaps")
+
+    return "\n".join(lines)
+
+
+def fetch_alignment_gaps(db) -> str:
+    """Detect entities missing labels in aligned languages.
+
+    Returns a formatted string describing the gaps found.
+    """
+    lines: list[str] = []
+    total_gaps = 0
+    no_gap_count = 0
+
+    with db.cursor() as cur:
+        cur.execute("""
+            SELECT a.id, a.source_block_id, a.target_block_id,
+                   sb.language, sb.source_text,
+                   tb.language, tb.source_text
+            FROM block_alignments a
+            JOIN blocks sb ON sb.id = a.source_block_id
+            JOIN blocks tb ON tb.id = a.target_block_id
+            ORDER BY a.created_at
+        """)
+        alignments = cur.fetchall()
+
+        if not alignments:
+            return "No alignments to check."
+
+        for _, src_block_id, tgt_block_id, src_lang, src_text, tgt_lang, tgt_text in alignments:
+            direction_gaps: list[tuple[str, str, str, str]] = []
+            for from_block_id, from_lang, to_lang in [
+                (src_block_id, src_lang, tgt_lang),
+                (tgt_block_id, tgt_lang, src_lang),
+            ]:
+                cur.execute(
+                    """
+                    SELECT DISTINCT e.id, e.entity_type, e.canonical_label
+                    FROM mentions m
+                    JOIN entities e ON e.id = m.entity_id
+                    WHERE m.block_id = %s
+                    """,
+                    (from_block_id,),
+                )
+                entities = cur.fetchall()
+
+                for eid, etype, canonical in entities:
+                    cur.execute(
+                        "SELECT 1 FROM entity_labels WHERE entity_id = %s AND language = %s",
+                        (eid, to_lang),
+                    )
+                    if not cur.fetchone():
+                        direction_gaps.append((etype, canonical, from_lang, to_lang))
+
+            if not direction_gaps:
+                no_gap_count += 1
+                continue
+
+            # Deduplicate
+            seen: set[tuple[str, str]] = set()
+            unique_gaps: list[tuple[str, str, str, str]] = []
+            for etype, canonical, from_lang, to_lang in direction_gaps:
+                key = (canonical, to_lang)
+                if key not in seen:
+                    seen.add(key)
+                    unique_gaps.append((etype, canonical, from_lang, to_lang))
+
+            src_preview = src_text.replace("\n", " ")[:40]
+            tgt_preview = tgt_text.replace("\n", " ")[:40]
+            lines.append(
+                f'({src_lang}) "{src_preview}" '
+                f'<-> ({tgt_lang}) "{tgt_preview}":'
+            )
+            for etype, canonical, from_lang, to_lang in unique_gaps:
+                total_gaps += 1
+                lines.append(f'  {etype} "{canonical}" -- no label for {to_lang}')
+            lines.append("")
+
+    if no_gap_count:
+        lines.append(f"No gaps for {no_gap_count} other alignment(s).")
+    if total_gaps == 0:
+        lines.append("No gaps found.")
+    else:
+        lines.append(f"Total gaps: {total_gaps}")
+
+    return "\n".join(lines)
