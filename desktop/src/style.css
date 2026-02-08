@@ -1622,3 +1622,155 @@ body {
   background: rgba(180, 140, 40, 0.15);
   color: #8a6e20;
 }
+
+/* ==========================================================================
+   Alignment gap results
+   ========================================================================== */
+
+.alignment-gaps-panel {
+  margin: 0.8rem 0;
+  padding: 0.8rem;
+  background: var(--code-block-bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.alignment-gaps-summary {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+}
+
+.alignment-gap-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.alignment-gap-row:last-child {
+  border-bottom: none;
+}
+
+.alignment-gap-name {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.alignment-gap-detail {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+/* ==========================================================================
+   Inflect dialog
+   ========================================================================== */
+
+.inflect-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.inflect-dialog {
+  background: var(--popup-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px var(--popup-shadow);
+}
+
+.inflect-dialog-title {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--fg);
+  margin: 0 0 1rem 0;
+}
+
+.inflect-dialog-group {
+  margin-bottom: 0.8rem;
+}
+
+.inflect-dialog-group label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.inflect-dialog-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-size: 0.9rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.inflect-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.inflect-dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.inflect-dialog-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.inflect-dialog-btn:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.inflect-dialog-btn-secondary {
+  background: transparent;
+  color: var(--fg-dim);
+  border-color: var(--border);
+}
+
+.inflect-dialog-btn-secondary:hover {
+  background: var(--hover-overlay);
+  color: var(--fg);
+}
+
+.inflect-dialog-result {
+  margin-top: 1rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--selected);
+  border: 1px solid var(--selected-border);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.inflect-dialog-result-label {
+  color: var(--muted);
+}
+
+.inflect-dialog-result-value {
+  color: var(--fg);
+  font-weight: 500;
+}

@@ -166,6 +166,10 @@ export function deleteAlignment(port, alignmentId) {
   return del(port, `/api/alignments/${alignmentId}`);
 }
 
+export function fetchAlignmentGaps(port) {
+  return get(port, "/api/alignment-gaps");
+}
+
 // Surface forms
 export function inflectWord(port, language, baseForm, features, properties) {
   return post(port, "/api/inflect", { language, base_form: baseForm, features, properties });

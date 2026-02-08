@@ -537,6 +537,53 @@ const handlers = {
     }
   },
 
+  async onShowAlignmentGaps() {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    try {
+      const data = await api.fetchAlignmentGaps(port);
+      store.dispatch({ type: "set-alignment-gaps", data });
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  onHideAlignmentGaps() {
+    store.dispatch({ type: "clear-alignment-gaps" });
+  },
+
+  onOpenInflectDialog() {
+    store.dispatch({ type: "open-inflect-dialog" });
+  },
+
+  onCloseInflectDialog() {
+    store.dispatch({ type: "close-inflect-dialog" });
+  },
+
+  async onInflectWord(word, language, features) {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    try {
+      const featureObj = {};
+      if (features) {
+        for (const f of features.split(",")) {
+          const trimmed = f.trim();
+          if (trimmed) featureObj[trimmed] = true;
+        }
+      }
+      const data = await api.inflectWord(
+        port,
+        language,
+        word,
+        Object.keys(featureObj).length > 0 ? featureObj : null,
+        null,
+      );
+      store.dispatch({ type: "set-inflect-result", result: data.result });
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onAddReview() {
     const port = store.getState().sidecarPort;
     if (!port) return;

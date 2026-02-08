@@ -30,6 +30,7 @@ export function render(state, handlers) {
   renderContent(state, handlers);
   renderError(state, handlers);
   renderCommandPalette(state, handlers);
+  renderInflectDialog(state, handlers);
   renderThemeToggle(state, handlers);
 
   // Bind switch-work button
@@ -950,7 +951,27 @@ function renderAlignmentList(el, state, handlers) {
   h2.style.fontSize = "1.2rem";
   h2.style.fontWeight = "500";
   header.appendChild(h2);
+
+  if (handlers && handlers.onShowAlignmentGaps) {
+    const gapBtn = document.createElement("button");
+    gapBtn.className = "entity-action-btn";
+    gapBtn.textContent = state.alignmentGaps ? "Hide Gaps" : "Show Gaps";
+    gapBtn.addEventListener("click", () => {
+      if (state.alignmentGaps) {
+        handlers.onHideAlignmentGaps();
+      } else {
+        handlers.onShowAlignmentGaps();
+      }
+    });
+    header.appendChild(gapBtn);
+  }
+
   el.appendChild(header);
+
+  // Gap results panel
+  if (state.alignmentGaps) {
+    renderAlignmentGaps(el, state.alignmentGaps);
+  }
 
   if (state.loading) {
     el.innerHTML += '<div class="content-placeholder">Loading\u2026</div>';
@@ -1000,6 +1021,190 @@ function renderAlignmentList(el, state, handlers) {
 
     el.appendChild(row);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Alignment gap results
+// ---------------------------------------------------------------------------
+
+function renderAlignmentGaps(el, data) {
+  const panel = document.createElement("div");
+  panel.className = "alignment-gaps-panel";
+
+  const summary = document.createElement("div");
+  summary.className = "alignment-gaps-summary";
+  summary.textContent = `${data.total} gap(s) found across ${data.checked} alignment(s)`;
+  panel.appendChild(summary);
+
+  if (data.gaps.length === 0) {
+    const noGaps = document.createElement("p");
+    noGaps.className = "entity-note-empty";
+    noGaps.textContent = "No gaps found. All entities have labels in both aligned languages.";
+    panel.appendChild(noGaps);
+  } else {
+    for (const gap of data.gaps) {
+      const row = document.createElement("div");
+      row.className = "alignment-gap-row";
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "entity-badge";
+      typeBadge.textContent = gap.entity_type;
+      row.appendChild(typeBadge);
+
+      const name = document.createElement("span");
+      name.className = "alignment-gap-name";
+      name.textContent = gap.canonical_label;
+      row.appendChild(name);
+
+      const detail = document.createElement("span");
+      detail.className = "alignment-gap-detail";
+      detail.textContent = `has ${gap.has_language}, missing ${gap.missing_language}`;
+      row.appendChild(detail);
+
+      panel.appendChild(row);
+    }
+  }
+
+  el.appendChild(panel);
+}
+
+// ---------------------------------------------------------------------------
+// Inflect dialog
+// ---------------------------------------------------------------------------
+
+function renderInflectDialog(state, handlers) {
+  const existing = document.querySelector(".inflect-dialog-backdrop");
+
+  if (!state.inflectDialogOpen) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  let backdrop = existing;
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.className = "inflect-dialog-backdrop";
+    backdrop.addEventListener("mousedown", (e) => {
+      if (e.target === backdrop) {
+        handlers.onCloseInflectDialog();
+      }
+    });
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = "";
+
+  const dialog = document.createElement("div");
+  dialog.className = "inflect-dialog";
+
+  const title = document.createElement("h3");
+  title.className = "inflect-dialog-title";
+  title.textContent = "Inflect Word";
+  dialog.appendChild(title);
+
+  // Word input
+  const wordGroup = document.createElement("div");
+  wordGroup.className = "inflect-dialog-group";
+  const wordLabel = document.createElement("label");
+  wordLabel.textContent = "Word";
+  wordGroup.appendChild(wordLabel);
+  const wordInput = document.createElement("input");
+  wordInput.type = "text";
+  wordInput.className = "inflect-dialog-input";
+  wordInput.placeholder = "e.g. cat";
+  wordInput.id = "inflect-word-input";
+  wordGroup.appendChild(wordInput);
+  dialog.appendChild(wordGroup);
+
+  // Language select
+  const langGroup = document.createElement("div");
+  langGroup.className = "inflect-dialog-group";
+  const langLabel = document.createElement("label");
+  langLabel.textContent = "Language";
+  langGroup.appendChild(langLabel);
+  const langSelect = document.createElement("select");
+  langSelect.className = "inflect-dialog-input";
+  langSelect.id = "inflect-lang-select";
+  for (const lang of ["en", "ja", "fr", "de", "es", "it", "pt", "zh", "ko", "ru"]) {
+    const opt = document.createElement("option");
+    opt.value = lang;
+    opt.textContent = lang;
+    langSelect.appendChild(opt);
+  }
+  langGroup.appendChild(langSelect);
+  dialog.appendChild(langGroup);
+
+  // Features input
+  const featGroup = document.createElement("div");
+  featGroup.className = "inflect-dialog-group";
+  const featLabel = document.createElement("label");
+  featLabel.textContent = "Features (comma-separated)";
+  featGroup.appendChild(featLabel);
+  const featInput = document.createElement("input");
+  featInput.type = "text";
+  featInput.className = "inflect-dialog-input";
+  featInput.placeholder = "e.g. plural, possessive";
+  featInput.id = "inflect-features-input";
+  featGroup.appendChild(featInput);
+  dialog.appendChild(featGroup);
+
+  // Inflect button
+  const btnRow = document.createElement("div");
+  btnRow.className = "inflect-dialog-actions";
+
+  const inflectBtn = document.createElement("button");
+  inflectBtn.className = "inflect-dialog-btn";
+  inflectBtn.textContent = "Inflect";
+  inflectBtn.addEventListener("click", () => {
+    const word = wordInput.value.trim();
+    const lang = langSelect.value;
+    const features = featInput.value.trim();
+    if (word) {
+      handlers.onInflectWord(word, lang, features);
+    }
+  });
+  btnRow.appendChild(inflectBtn);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "inflect-dialog-btn inflect-dialog-btn-secondary";
+  closeBtn.textContent = "Close";
+  closeBtn.addEventListener("click", () => handlers.onCloseInflectDialog());
+  btnRow.appendChild(closeBtn);
+
+  dialog.appendChild(btnRow);
+
+  // Result display
+  if (state.inflectResult !== null) {
+    const resultEl = document.createElement("div");
+    resultEl.className = "inflect-dialog-result";
+    const resultLabel = document.createElement("span");
+    resultLabel.className = "inflect-dialog-result-label";
+    resultLabel.textContent = "Result: ";
+    resultEl.appendChild(resultLabel);
+    const resultValue = document.createElement("span");
+    resultValue.className = "inflect-dialog-result-value";
+    resultValue.textContent = state.inflectResult;
+    resultEl.appendChild(resultValue);
+    dialog.appendChild(resultEl);
+  }
+
+  // Keyboard handling
+  function onKeydown(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      inflectBtn.click();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      handlers.onCloseInflectDialog();
+    }
+  }
+  wordInput.addEventListener("keydown", onKeydown);
+  featInput.addEventListener("keydown", onKeydown);
+
+  backdrop.appendChild(dialog);
+
+  // Auto-focus word input
+  requestAnimationFrame(() => wordInput.focus());
 }
 
 // ---------------------------------------------------------------------------

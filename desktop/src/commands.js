@@ -80,4 +80,13 @@ export const commands = [
     shortcut: null,
     action: (ctx) => ctx.handlers.onAddEntity(),
   },
+
+  // Linguistics
+  {
+    id: "inflect-word",
+    label: "Inflect word",
+    category: "Linguistics",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onOpenInflectDialog(),
+  },
 ];

@@ -37,6 +37,9 @@ export const initialState = {
   addingProperty: false,
   commandPaletteOpen: false, // Cmd+K command palette
   theme: null,             // null = system, "light", "dark"
+  alignmentGaps: null,     // { gaps, total, checked } or null
+  inflectDialogOpen: false, // inflect word modal
+  inflectResult: null,     // result string from inflect API
 };
 
 export function reduce(state, action) {
@@ -198,6 +201,21 @@ export function reduce(state, action) {
 
     case "set-theme":
       return { ...state, theme: action.theme };
+
+    case "set-alignment-gaps":
+      return { ...state, alignmentGaps: action.data };
+
+    case "clear-alignment-gaps":
+      return { ...state, alignmentGaps: null };
+
+    case "open-inflect-dialog":
+      return { ...state, inflectDialogOpen: true, inflectResult: null };
+
+    case "close-inflect-dialog":
+      return { ...state, inflectDialogOpen: false, inflectResult: null };
+
+    case "set-inflect-result":
+      return { ...state, inflectResult: action.result };
 
     case "return-to-picker":
       return {
