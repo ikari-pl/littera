@@ -11,7 +11,7 @@ This project is intentionally opinionated, architecturally conservative, and qui
 ## Core Ideas
 
 - Writing has **structure**: `Work → Document → Section → Block`
-- Meaning is separate from text via **global entities** and **mentions`
+- Meaning is separate from text via **global entities** and **mentions**
 - The system is **local‑first** and uses a real embedded database
 - Multiple interfaces serve different modes of thinking
 - Correct architecture matters more than feature velocity
@@ -33,10 +33,11 @@ Littera is intentionally multi‑interface. Each interface optimizes for a diffe
   - Meaning made visible
   - Keyboard‑driven, mode‑aware
 
-- **Desktop App (Planned)** — Immersive writing
-  - WYSIWYG‑leaning
-  - Metadata largely hidden by default
-  - Structure and semantics preserved invisibly
+- **Desktop App** — Immersive writing
+  - Tauri shell with Python sidecar and embedded PostgreSQL
+  - ProseMirror rich‑text editor with block‑level structure
+  - Entity mentions, slash commands, bubble toolbar
+  - Work directory picker with recent works and workspace support
   - Designed for flow, not administration
 
 The CLI defines reality. Other interfaces translate it.
@@ -60,16 +61,15 @@ Littera is not:
 
 ## Project Status
 
-Littera is early, but its foundations are in place:
+Littera's core is stable and all three interfaces are functional:
 
 - Embedded PostgreSQL (local, real, tested)
-- Structured writing model
+- Structured writing model (`Work → Document → Section → Block`)
 - Global semantic entities with work‑specific overlays
-- Authoritative CLI
-- Functional TUI foundation
-- Black‑box tests with no mocks
-
-The next major milestone is a **desktop writing application** that brings Littera’s model into a fluid, distraction‑free environment.
+- Authoritative CLI with full model coverage
+- TUI for semantic navigation and keyboard‑driven editing
+- Desktop app with rich‑text editor, entity mentions, and work picker
+- Black‑box CLI tests with no mocks; Playwright test suite for the desktop app
 
 ---
 
