@@ -1182,6 +1182,78 @@ body {
   to { transform: rotate(360deg); }
 }
 
+.picker-loading-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 1rem;
+  opacity: 0.7;
+}
+
+/* ==========================================================================
+   Skeleton Loading
+   ========================================================================== */
+
+.skeleton {
+  background: var(--border);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.skeleton-text {
+  height: 0.9rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.skeleton-text-short {
+  width: 60%;
+}
+
+.skeleton-sidebar-item {
+  height: 2.2rem;
+  margin-bottom: 0.3rem;
+  border-radius: 4px;
+}
+
+.skeleton-block {
+  height: 4rem;
+  margin-bottom: 1.5rem;
+  border-radius: 4px;
+}
+
+.skeleton-entity-header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1.5rem;
+}
+
+.skeleton-badge {
+  width: 60px;
+  height: 1.4rem;
+  border-radius: 3px;
+}
+
+.skeleton-title {
+  height: 1.4rem;
+  width: 200px;
+  border-radius: 3px;
+}
+
 /* ==========================================================================
    Zen Mode (distraction-free)
    ========================================================================== */

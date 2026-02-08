@@ -188,7 +188,8 @@ function renderLoading() {
     loading.innerHTML =
       `<h1>Littera</h1>` +
       `<p>Starting work database\u2026</p>` +
-      `<div class="picker-spinner"></div>`;
+      `<div class="picker-spinner"></div>` +
+      `<p class="picker-loading-hint">This may take a moment on first launch</p>`;
     app.appendChild(loading);
   }
 }
@@ -308,10 +309,11 @@ function renderSidebar(state, handlers) {
   renderSidebarActions(state, handlers);
 
   if (state.loading) {
-    const li = document.createElement("li");
-    li.className = "sidebar-loading";
-    li.textContent = "Loading\u2026";
-    el.appendChild(li);
+    for (let i = 0; i < 5; i++) {
+      const li = document.createElement("li");
+      li.className = "skeleton skeleton-sidebar-item";
+      el.appendChild(li);
+    }
     return;
   }
 
@@ -439,7 +441,24 @@ function renderContent(state, handlers) {
   if (indicator) indicator.remove();
 
   if (state.loading) {
-    el.innerHTML = '<div class="content-placeholder">Loading\u2026</div>';
+    el.innerHTML = '';
+    if (state.view === 'entities') {
+      const header = document.createElement('div');
+      header.className = 'skeleton-entity-header';
+      header.innerHTML = '<div class="skeleton skeleton-badge"></div><div class="skeleton skeleton-title"></div>';
+      el.appendChild(header);
+      for (let i = 0; i < 3; i++) {
+        const line = document.createElement('div');
+        line.className = 'skeleton skeleton-text' + (i === 2 ? ' skeleton-text-short' : '');
+        el.appendChild(line);
+      }
+    } else {
+      for (let i = 0; i < 3; i++) {
+        const block = document.createElement('div');
+        block.className = 'skeleton skeleton-block';
+        el.appendChild(block);
+      }
+    }
     return;
   }
 
