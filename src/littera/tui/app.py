@@ -26,6 +26,7 @@ from littera.tui.state import (
     GotoOutline,
     GotoEntities,
     GotoAlignments,
+    GotoReviews,
     ExitEditor,
     OutlinePush,
     OutlinePop,
@@ -34,6 +35,8 @@ from littera.tui.state import (
     EntitiesClearSelection,
     AlignmentsSelect,
     AlignmentsClearSelection,
+    ReviewsSelect,
+    ReviewsClearSelection,
     ClearSelection,
     StartEdit,
 )
@@ -42,6 +45,7 @@ from littera.tui.views.alignments import AlignmentsView
 from littera.tui.views.entities import EntitiesView
 from littera.tui.views.editor import EditorView
 from littera.tui.views.outline import OutlineView
+from littera.tui.views.reviews import ReviewsView
 from littera.tui.views.input_dialog import InputDialog, ConfirmDialog, RecoveryDialog
 from littera.tui.decorators import safe_action
 from littera.tui import queries, actions
@@ -83,6 +87,7 @@ class LitteraApp(App):
         ("ctrl+shift+d", "delete_mention", "Delete Mention"),
         ("A", "alignments", "Alignments"),
         ("g", "show_gaps", "Show Gaps"),
+        ("R", "reviews", "Reviews"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -138,6 +143,7 @@ class LitteraApp(App):
             "entities": EntitiesView(),
             "alignments": AlignmentsView(),
             "editor": EditorView(),
+            "reviews": ReviewsView(),
         }
         self._render_view()
 
@@ -230,6 +236,14 @@ class LitteraApp(App):
         self._clear_undo_redo()
         self._render_view()
 
+    def action_reviews(self) -> None:
+        if self.state is None:
+            return
+        self.state.dispatch(GotoReviews())
+        self.state.dispatch(ExitEditor())
+        self._clear_undo_redo()
+        self._render_view()
+
     # =====================
     # Navigation
     # =====================
@@ -281,6 +295,14 @@ class LitteraApp(App):
             self.action_outline()
             return
 
+        if self.state.view == "reviews":
+            if self.state.reviews.selection.kind == "review":
+                self.state.dispatch(ReviewsClearSelection())
+                self._render_view()
+                return
+            self.action_outline()
+            return
+
         # Outline view: pop path
         if self.state.outline.path:
             self.state.dispatch(OutlinePop())
@@ -292,12 +314,16 @@ class LitteraApp(App):
 
     @safe_action
     def action_add_item(self) -> None:
-        """Add document/section/block at current level."""
+        """Add document/section/block/review at current level."""
         if self.state is None:
             return
 
         if self.state.view == "entities":
             self._prompt_add_entity()
+            return
+
+        if self.state.view == "reviews":
+            self._prompt_add_review()
             return
 
         if self.state.view != "outline":
@@ -397,6 +423,67 @@ class LitteraApp(App):
         self._render_view()
 
     @safe_action
+    def _prompt_add_review(self) -> None:
+        """Chain dialogs to create a review: description then severity."""
+
+        async def on_desc_result(description: str | None) -> None:
+            if not description:
+                return
+
+            async def on_severity_result(severity: str | None) -> None:
+                if not severity:
+                    return
+                severity = severity.strip().lower()
+                if severity not in ("low", "medium", "high"):
+                    self.notify("Severity must be low, medium, or high", severity="warning")
+                    return
+                self._create_review(description, severity)
+
+            self.push_screen(
+                InputDialog("New Review", "Severity (low/medium/high):", "medium"),
+                on_severity_result,
+            )
+
+        self.push_screen(
+            InputDialog("New Review", "Description:", ""),
+            on_desc_result,
+        )
+
+    @safe_action
+    def _create_review(self, description: str, severity: str) -> None:
+        if self.state is None or self.state.work is None:
+            return
+        work_id = self.state.work.get("work", {}).get("id")
+        if work_id is None:
+            return
+        review_id = actions.create_review(self.state.db, work_id, description, severity)
+        self.state.dispatch(ReviewsSelect(review_id))
+        self._render_view()
+
+    @safe_action
+    def _delete_review(self) -> None:
+        """Delete the selected review with confirmation."""
+        if self.state is None:
+            return
+        sel = self.state.reviews.selection
+        if not sel or sel.kind != "review" or not sel.id:
+            return
+
+        review_id = sel.id
+
+        async def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            actions.delete_review(self.state.db, review_id)
+            self.state.dispatch(ClearSelection())
+            self._render_view()
+
+        self.push_screen(
+            ConfirmDialog("Delete Review?", "This cannot be undone."),
+            on_confirm,
+        )
+
+    @safe_action
     def action_edit_title(self) -> None:
         """Edit title of selected document or section."""
         if self.state is None:
@@ -426,12 +513,16 @@ class LitteraApp(App):
 
     @safe_action
     def action_delete_item(self) -> None:
-        """Delete selected document/section/block, or alignment when in alignments view."""
+        """Delete selected document/section/block, alignment, or review."""
         if self.state is None:
             return
         if self.state.view == "alignments":
             self.action_delete_alignment()
             return
+        if self.state.view == "reviews":
+            self._delete_review()
+            return
+
         if self.state.view != "outline":
             return
 
@@ -888,6 +979,8 @@ class LitteraApp(App):
             queries.refresh_entities(self.state)
         elif self.state.view == "alignments":
             queries.refresh_alignments(self.state)
+        elif self.state.view == "reviews":
+            queries.refresh_reviews(self.state)
 
     async def _render_view_async(self) -> None:
         if self.state is None:
@@ -913,7 +1006,7 @@ class LitteraApp(App):
                 editor.focus()
             except NoMatches:
                 pass
-        elif self.state.view in ("outline", "entities", "alignments"):
+        elif self.state.view in ("outline", "entities", "alignments", "reviews"):
             try:
                 nav = self.screen.query_one("#nav")
                 nav.focus()
@@ -974,7 +1067,7 @@ class LitteraApp(App):
         if "-" not in raw:
             return None, raw
         prefix, rest = raw.split("-", 1)
-        if prefix in {"doc", "sec", "blk", "ent", "aln"}:
+        if prefix in {"doc", "sec", "blk", "ent", "aln", "rev"}:
             return prefix, rest
         return None, raw
 
@@ -996,6 +1089,17 @@ class LitteraApp(App):
                 return False
 
             self.state.dispatch(AlignmentsSelect(alignment_id))
+            return True
+
+        if self.state.view == "reviews":
+            prefix, raw_uuid = self._parse_widget_id(item_id)
+            review_id = raw_uuid if prefix == "rev" else item_id
+
+            current = self.state.reviews.selection
+            if current.kind == "review" and current.id == review_id:
+                return False
+
+            self.state.dispatch(ReviewsSelect(review_id))
             return True
 
         if self.state.view == "entities":

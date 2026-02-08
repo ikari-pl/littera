@@ -68,6 +68,26 @@ def create_entity(db, entity_type: str, name: str) -> str | None:
 # Deletion
 # =============================================================================
 
+def create_review(db, work_id: str, description: str, severity: str = "medium",
+                  scope: str | None = None, issue_type: str | None = None) -> str:
+    """Create a new review. Returns the review id."""
+    review_id = str(uuid.uuid4())
+    with db.cursor() as cur:
+        cur.execute("""
+            INSERT INTO reviews (id, work_id, description, severity, scope, issue_type)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (review_id, work_id, description, severity, scope, issue_type))
+    db.commit()
+    return review_id
+
+
+def delete_review(db, review_id: str) -> None:
+    """Delete a review by its id."""
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM reviews WHERE id = %s", (review_id,))
+    db.commit()
+
+
 def delete_item(db, kind: str, item_id: str) -> None:
     """Delete a document, section, or block by kind and id."""
     with db.cursor() as cur:
