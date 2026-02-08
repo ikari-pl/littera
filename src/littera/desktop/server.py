@@ -52,6 +52,7 @@ ROUTES = [
     (re.compile(r"^/api/mentions/([^/]+)/surface$"), "PUT", "_put_mention_surface"),
     (re.compile(r"^/api/mentions/([^/]+)$"), "DELETE", "_delete_mention"),
     (re.compile(r"^/api/inflect$"), "POST", "_post_inflect"),
+    (re.compile(r"^/api/alignment-gaps$"), "GET", "_get_alignment_gaps"),
     (re.compile(r"^/api/alignments$"), "GET", "_get_alignments"),
     (re.compile(r"^/api/alignments$"), "POST", "_post_alignment"),
     (re.compile(r"^/api/alignments/([^/]+)$"), "DELETE", "_delete_alignment"),
@@ -553,6 +554,60 @@ class SidecarHandler(BaseHTTPRequestHandler):
     # -----------------------------------------------------------------
     # Alignment handlers
     # -----------------------------------------------------------------
+
+    def _get_alignment_gaps(self):
+        """Detect entities missing labels in aligned languages."""
+        gaps = []
+        checked = 0
+
+        with self.work_db.conn.cursor() as cur:
+            cur.execute("""
+                SELECT a.id, a.source_block_id, a.target_block_id,
+                       sb.language, tb.language
+                FROM block_alignments a
+                JOIN blocks sb ON sb.id = a.source_block_id
+                JOIN blocks tb ON tb.id = a.target_block_id
+                ORDER BY a.created_at
+            """)
+            alignments = cur.fetchall()
+
+            seen = set()
+
+            for _, src_block_id, tgt_block_id, src_lang, tgt_lang in alignments:
+                checked += 1
+                for from_block_id, from_lang, to_lang in [
+                    (src_block_id, src_lang, tgt_lang),
+                    (tgt_block_id, tgt_lang, src_lang),
+                ]:
+                    cur.execute(
+                        """
+                        SELECT DISTINCT e.id, e.entity_type, e.canonical_label
+                        FROM mentions m
+                        JOIN entities e ON e.id = m.entity_id
+                        WHERE m.block_id = %s
+                        """,
+                        (from_block_id,),
+                    )
+                    entities = cur.fetchall()
+
+                    for eid, etype, canonical in entities:
+                        key = (str(eid), to_lang)
+                        if key in seen:
+                            continue
+                        cur.execute(
+                            "SELECT 1 FROM entity_labels WHERE entity_id = %s AND language = %s",
+                            (eid, to_lang),
+                        )
+                        if not cur.fetchone():
+                            seen.add(key)
+                            gaps.append({
+                                "entity_type": etype,
+                                "canonical_label": canonical or "(unnamed)",
+                                "missing_language": to_lang,
+                                "has_language": from_lang,
+                            })
+
+        return {"gaps": gaps, "total": len(gaps), "checked": checked}
 
     def _get_alignments(self):
         """List all alignments with block details."""
