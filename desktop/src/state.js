@@ -6,6 +6,11 @@
  */
 
 export const initialState = {
+  // Picker phase
+  phase: "picker",         // "picker" | "loading" | "ready"
+  pickerData: null,        // { recent, workspace_works, workspace }
+  pickerError: null,
+  // Main app state
   view: "outline",        // "outline" | "entities"
   path: [],               // [{kind, id, title}, ...]
   items: [],              // current sidebar list items
@@ -27,7 +32,19 @@ export const initialState = {
 export function reduce(state, action) {
   switch (action.type) {
     case "init":
-      return { ...state, sidecarPort: action.port };
+      return { ...state, sidecarPort: action.port, phase: "ready" };
+
+    case "set-phase":
+      return { ...state, phase: action.phase };
+
+    case "set-picker-data":
+      return { ...state, pickerData: action.data, pickerError: null };
+
+    case "picker-error":
+      return { ...state, pickerError: action.message, phase: "picker" };
+
+    case "picker-loading":
+      return { ...state, phase: "loading", pickerError: null };
 
     case "set-items":
       return { ...state, items: action.items, loading: false };

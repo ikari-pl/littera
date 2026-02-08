@@ -6,15 +6,210 @@
  */
 
 // ---------------------------------------------------------------------------
-// Main render entry point
+// Main render entry point — branches on phase
 // ---------------------------------------------------------------------------
 
 export function render(state, handlers) {
+  if (state.phase === "picker") {
+    renderPicker(state, handlers);
+    return;
+  }
+
+  if (state.phase === "loading") {
+    renderLoading();
+    return;
+  }
+
+  // phase === "ready"
+  ensureAppLayout();
   renderBreadcrumb(state, handlers);
   renderTabs(state, handlers);
   renderSidebar(state, handlers);
   renderContent(state, handlers);
   renderError(state);
+}
+
+// ---------------------------------------------------------------------------
+// Picker screen
+// ---------------------------------------------------------------------------
+
+function renderPicker(state, handlers) {
+  const app = document.getElementById("app");
+
+  // Only rebuild if picker isn't already rendered
+  if (!app.querySelector("#picker")) {
+    app.innerHTML = "";
+    const picker = document.createElement("div");
+    picker.id = "picker";
+    app.appendChild(picker);
+  }
+
+  const picker = app.querySelector("#picker");
+  picker.innerHTML = "";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "picker-header";
+  header.innerHTML = `<h1>Littera</h1><p>Select a work to open</p>`;
+  picker.appendChild(header);
+
+  // Error banner
+  if (state.pickerError) {
+    const err = document.createElement("div");
+    err.className = "picker-error";
+    err.textContent = state.pickerError;
+    picker.appendChild(err);
+  }
+
+  // Action buttons
+  const actions = document.createElement("div");
+  actions.className = "picker-actions";
+
+  const openBtn = document.createElement("button");
+  openBtn.className = "picker-btn";
+  openBtn.textContent = "Open Work\u2026";
+  openBtn.addEventListener("click", () => handlers.onBrowseWork());
+  actions.appendChild(openBtn);
+
+  const newBtn = document.createElement("button");
+  newBtn.className = "picker-btn picker-btn-secondary";
+  newBtn.textContent = "New Work\u2026";
+  newBtn.addEventListener("click", () => handlers.onNewWork());
+  actions.appendChild(newBtn);
+
+  picker.appendChild(actions);
+
+  // Recent works
+  const data = state.pickerData;
+  if (data && data.recent && data.recent.length > 0) {
+    const section = document.createElement("div");
+    section.className = "picker-section";
+
+    const h2 = document.createElement("h2");
+    h2.textContent = "Recent Works";
+    section.appendChild(h2);
+
+    const list = document.createElement("ul");
+    list.className = "picker-list";
+
+    for (const work of data.recent) {
+      const li = document.createElement("li");
+      li.className = "picker-work-item";
+      li.addEventListener("click", () => handlers.onSelectWork(work.path));
+
+      const name = document.createElement("span");
+      name.className = "picker-work-name";
+      name.textContent = work.name;
+      li.appendChild(name);
+
+      const path = document.createElement("span");
+      path.className = "picker-work-path";
+      path.textContent = work.path;
+      li.appendChild(path);
+
+      list.appendChild(li);
+    }
+    section.appendChild(list);
+    picker.appendChild(section);
+  }
+
+  // Workspace works
+  if (data && data.workspace_works && data.workspace_works.length > 0) {
+    const section = document.createElement("div");
+    section.className = "picker-section";
+
+    const h2 = document.createElement("h2");
+    h2.textContent = "Workspace";
+    section.appendChild(h2);
+
+    const list = document.createElement("ul");
+    list.className = "picker-list";
+
+    for (const work of data.workspace_works) {
+      const li = document.createElement("li");
+      li.className = "picker-work-item";
+      li.addEventListener("click", () => handlers.onSelectWork(work.path));
+
+      const name = document.createElement("span");
+      name.className = "picker-work-name";
+      name.textContent = work.name;
+      li.appendChild(name);
+
+      const path = document.createElement("span");
+      path.className = "picker-work-path";
+      path.textContent = work.path;
+      li.appendChild(path);
+
+      list.appendChild(li);
+    }
+    section.appendChild(list);
+    picker.appendChild(section);
+  }
+
+  // Workspace config footer
+  const footer = document.createElement("div");
+  footer.className = "picker-workspace-config";
+
+  if (data && data.workspace) {
+    const wsPath = document.createElement("span");
+    wsPath.className = "picker-work-path";
+    wsPath.textContent = data.workspace;
+    footer.appendChild(wsPath);
+  }
+
+  const wsBtn = document.createElement("button");
+  wsBtn.className = "picker-btn-link";
+  wsBtn.textContent = data && data.workspace ? "Change Workspace" : "Set Workspace";
+  wsBtn.addEventListener("click", () => handlers.onSetWorkspace());
+  footer.appendChild(wsBtn);
+
+  picker.appendChild(footer);
+}
+
+// ---------------------------------------------------------------------------
+// Loading screen
+// ---------------------------------------------------------------------------
+
+function renderLoading() {
+  const app = document.getElementById("app");
+
+  if (!app.querySelector("#picker-loading")) {
+    app.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.id = "picker-loading";
+    loading.innerHTML =
+      `<h1>Littera</h1>` +
+      `<p>Starting work database\u2026</p>` +
+      `<div class="picker-spinner"></div>`;
+    app.appendChild(loading);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ensure app layout (sidebar + content) exists for ready phase
+// ---------------------------------------------------------------------------
+
+function ensureAppLayout() {
+  const app = document.getElementById("app");
+  if (app.querySelector("#sidebar")) return; // already built
+
+  app.innerHTML = `
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <h1>Littera</h1>
+      </div>
+      <nav id="breadcrumb"></nav>
+      <div id="sidebar-actions"></div>
+      <ul id="sidebar-list"></ul>
+      <div id="tab-bar">
+        <button id="tab-outline" class="tab tab-active">Outline</button>
+        <button id="tab-entities" class="tab">Entities</button>
+      </div>
+    </aside>
+    <main id="content">
+      <div class="content-placeholder">Loading\u2026</div>
+    </main>
+  `;
 }
 
 // ---------------------------------------------------------------------------

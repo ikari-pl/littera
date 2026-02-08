@@ -4,6 +4,7 @@
  * Initializes the store, connects Tauri IPC for the sidecar port,
  * subscribes the renderer, and implements the navigation flow.
  * Phase 2C: ProseMirror editor lifecycle, save, dirty tracking.
+ * Phase 2D: Work directory picker on launch.
  */
 
 import { initialState, reduce, createStore } from "./state.js";
@@ -51,10 +52,66 @@ function checkDirtyBeforeNav() {
 }
 
 // ---------------------------------------------------------------------------
+// Picker handlers
+// ---------------------------------------------------------------------------
+
+const pickerHandlers = {
+  async onSelectWork(path) {
+    store.dispatch({ type: "picker-loading" });
+    try {
+      const port = await invoke("open_work", { path });
+      store.dispatch({ type: "init", port });
+      await loadLevel();
+    } catch (err) {
+      store.dispatch({ type: "picker-error", message: String(err) });
+    }
+  },
+
+  async onBrowseWork() {
+    try {
+      const path = await invoke("pick_folder");
+      if (path) {
+        await pickerHandlers.onSelectWork(path);
+      }
+    } catch (err) {
+      store.dispatch({ type: "picker-error", message: String(err) });
+    }
+  },
+
+  async onNewWork() {
+    try {
+      const path = await invoke("pick_folder");
+      if (!path) return;
+      store.dispatch({ type: "picker-loading" });
+      await invoke("init_work", { path });
+      const port = await invoke("open_work", { path });
+      store.dispatch({ type: "init", port });
+      await loadLevel();
+    } catch (err) {
+      store.dispatch({ type: "picker-error", message: String(err) });
+    }
+  },
+
+  async onSetWorkspace() {
+    try {
+      const path = await invoke("pick_folder");
+      if (!path) return;
+      const data = await invoke("set_workspace", { path });
+      store.dispatch({ type: "set-picker-data", data });
+    } catch (err) {
+      store.dispatch({ type: "picker-error", message: String(err) });
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Event handlers (passed to render functions)
 // ---------------------------------------------------------------------------
 
 const handlers = {
+  // Picker handlers (merged in)
+  ...pickerHandlers,
+
   onItemClick(item) {
     const state = store.getState();
 
@@ -299,6 +356,9 @@ async function loadEntityDetail(entityId) {
 store.subscribe((state) => {
   render(state, handlers);
 
+  // Editor lifecycle is only relevant in the ready phase
+  if (state.phase !== "ready") return;
+
   // Create editor when entering editing mode
   if (state.editing && !editorView) {
     const container = document.getElementById("prosemirror-editor");
@@ -333,10 +393,6 @@ store.subscribe((state) => {
     pendingBlocks = null;
   }
 });
-
-// ---------------------------------------------------------------------------
-// Cmd+S save handler
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Warn on window/tab close with unsaved changes
@@ -433,11 +489,10 @@ async function saveAllBlocks(port, doc, sectionId) {
 
 async function init() {
   try {
-    const port = await invoke("sidecar_port");
-    store.dispatch({ type: "init", port });
-    await loadLevel();
+    const data = await invoke("get_picker_data");
+    store.dispatch({ type: "set-picker-data", data });
   } catch (err) {
-    store.dispatch({ type: "error", message: `Sidecar error: ${err}` });
+    store.dispatch({ type: "picker-error", message: `Failed to load: ${err}` });
   }
 }
 

@@ -1,8 +1,9 @@
 /**
  * fixtures.js — Mock data + setupPage() helper for Playwright tests.
  *
- * Mocks window.__TAURI__ to return a fake sidecar port, then intercepts
- * all HTTP requests to that port with pattern-matched mock responses.
+ * Mocks window.__TAURI__ to return picker data and handle IPC commands,
+ * then intercepts all HTTP requests to the mock sidecar port with
+ * pattern-matched mock responses.
  */
 
 export const MOCK_PORT = 55555;
@@ -103,6 +104,17 @@ export const MOCK_DATA = {
       labels: [],
       mentions: [],
     },
+  },
+
+  pickerData: {
+    recent: [
+      { path: "/home/user/my-work", name: "my-work", last_opened: 1700000000 },
+      { path: "/home/user/thesis", name: "thesis", last_opened: 1699000000 },
+    ],
+    workspace_works: [
+      { path: "/home/user/workspace/project-a", name: "project-a" },
+    ],
+    workspace: "/home/user/workspace",
   },
 };
 
@@ -223,8 +235,13 @@ export async function setupPage(page) {
   await page.addInitScript(`
     window.__TAURI__ = {
       core: {
-        invoke: (cmd) => {
+        invoke: (cmd, args) => {
           if (cmd === "sidecar_port") return Promise.resolve(${MOCK_PORT});
+          if (cmd === "get_picker_data") return Promise.resolve(${JSON.stringify(MOCK_DATA.pickerData)});
+          if (cmd === "open_work") return Promise.resolve(${MOCK_PORT});
+          if (cmd === "pick_folder") return Promise.resolve("/tmp/picked-folder");
+          if (cmd === "set_workspace") return Promise.resolve(${JSON.stringify(MOCK_DATA.pickerData)});
+          if (cmd === "init_work") return Promise.resolve(null);
           return Promise.reject("Unknown command: " + cmd);
         },
       },
@@ -242,10 +259,15 @@ export async function setupPage(page) {
 // ---------------------------------------------------------------------------
 
 /**
- * Navigate to app and wait for initial document list to load.
+ * Navigate to app and wait for picker, then click first recent work
+ * to transition through to the main UI with sidebar.
  */
 export async function gotoApp(page) {
   await page.goto(APP_URL);
+  // Wait for picker to render with recent works
+  await page.locator(".picker-work-item").first().waitFor({ state: "visible", timeout: 5000 });
+  // Click the first recent work to open it
+  await page.locator(".picker-work-item").first().click();
   // Wait for sidebar to populate with documents
   await page.locator(".sidebar-item").first().waitFor({ state: "visible", timeout: 5000 });
 }

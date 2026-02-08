@@ -115,6 +115,9 @@ test("empty list shows 'No items' text", async ({ page }) => {
     route.fulfill({ json: [] });
   });
   await page.goto("http://localhost:5199");
+  // Click through picker first (select first recent work)
+  await page.locator(".picker-work-item").first().waitFor({ state: "visible", timeout: 5000 });
+  await page.locator(".picker-work-item").first().click();
   // Wait for empty state (no sidebar-item will appear, so wait for the empty message)
   await expect(page.locator(".sidebar-empty")).toHaveText("No items");
 });
