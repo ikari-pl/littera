@@ -82,12 +82,22 @@ const handlers = {
 
   onBreadcrumbClick(depth) {
     if (!checkDirtyBeforeNav()) return;
+    // If viewing entities, switch back to outline before navigating
+    const state = store.getState();
+    if (state.view === "entities") {
+      store.dispatch({ type: "set-view", view: "outline" });
+    }
     store.dispatch({ type: "pop-to", depth });
     loadLevel();
   },
 
   onTabClick(view) {
     if (!checkDirtyBeforeNav()) return;
+    // Close editor before switching views to clear editing state
+    const state = store.getState();
+    if (state.editing) {
+      store.dispatch({ type: "editor-close" });
+    }
     store.dispatch({ type: "set-view", view });
     if (view === "entities") {
       loadEntities();
@@ -298,6 +308,13 @@ store.subscribe((state) => {
           store.dispatch({ type: "editor-mark-dirty" });
         },
         fetchEntities: () => api.fetchEntities(store.getState().sidecarPort),
+        onMentionClick(entityId) {
+          store.dispatch({ type: "editor-close" });
+          store.dispatch({ type: "set-view", view: "entities" });
+          store.dispatch({ type: "select-entity", id: entityId });
+          loadEntities();
+          loadEntityDetail(entityId);
+        },
       });
 
       // Load staged blocks

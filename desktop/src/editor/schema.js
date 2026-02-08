@@ -76,6 +76,16 @@ export const schema = new Schema({
       },
     },
 
+    blockquote: {
+      content: "block+",
+      group: "block",
+      defining: true,
+      parseDOM: [{ tag: "blockquote" }],
+      toDOM() {
+        return ["blockquote", 0];
+      },
+    },
+
     code_block: {
       content: "text*",
       group: "block",
@@ -84,7 +94,7 @@ export const schema = new Schema({
       marks: "",
       parseDOM: [{ tag: "pre", preserveWhitespace: "full" }],
       toDOM() {
-        return ["pre", ["code", 0]];
+        return ["pre", { spellcheck: "false", autocorrect: "off", autocapitalize: "off" }, ["code", 0]];
       },
     },
 

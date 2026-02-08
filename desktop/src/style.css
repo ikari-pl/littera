@@ -586,7 +586,15 @@ body {
   border-radius: 3px;
 }
 
+#prosemirror-editor blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1rem;
+  color: var(--fg-dim);
+  margin: 0.6rem 0;
+}
+
 #prosemirror-editor pre {
+  line-height: 1.2;
   background: rgba(0, 0, 0, 0.3);
   padding: 0.8rem 1rem;
   border-radius: 4px;
@@ -614,7 +622,7 @@ body {
   padding: 0.05em 0.5em;
   border-radius: 10px;
   vertical-align: baseline;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
   border: 1px solid rgba(124, 143, 168, 0.3);
 }

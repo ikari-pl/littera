@@ -27,6 +27,7 @@ const parseSchema = new Schema({
     doc: { content: "block+" },
     paragraph: schema.spec.nodes.get("paragraph"),
     heading: schema.spec.nodes.get("heading"),
+    blockquote: schema.spec.nodes.get("blockquote"),
     code_block: schema.spec.nodes.get("code_block"),
     horizontal_rule: schema.spec.nodes.get("horizontal_rule"),
     text: schema.spec.nodes.get("text"),
@@ -79,7 +80,7 @@ const md = markdownit("commonmark", { html: false }).use(mentionPlugin);
 // ---------------------------------------------------------------------------
 
 export const litteraParser = new MarkdownParser(parseSchema, md, {
-  blockquote: { block: "paragraph" }, // flatten blockquotes to paragraphs
+  blockquote: { block: "blockquote" },
   paragraph: { block: "paragraph" },
   heading: {
     block: "heading",
@@ -122,6 +123,9 @@ export const litteraSerializer = new MarkdownSerializer(
     // littera_block: just serialize children, add blank line between blocks
     littera_block(state, node) {
       state.renderContent(node);
+    },
+    blockquote(state, node) {
+      state.wrapBlock("> ", null, node, () => state.renderContent(node));
     },
     paragraph(state, node) {
       state.renderInline(node);

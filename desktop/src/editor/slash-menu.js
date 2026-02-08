@@ -7,7 +7,7 @@
  */
 
 import { Plugin, PluginKey } from "prosemirror-state";
-import { setBlockType } from "prosemirror-commands";
+import { setBlockType, wrapIn } from "prosemirror-commands";
 import { positionPopup } from "./popup-utils.js";
 import { schema } from "./schema.js";
 
@@ -62,7 +62,9 @@ function executeCommand(view, command, slashState) {
     setBlockType(schema.nodes.heading, { level: 3 })(view.state, view.dispatch);
   } else if (label === "Code Block") {
     setBlockType(schema.nodes.code_block)(view.state, view.dispatch);
-  } else if (label === "Quote" || label === "Plain Text") {
+  } else if (label === "Quote") {
+    wrapIn(schema.nodes.blockquote)(view.state, view.dispatch);
+  } else if (label === "Plain Text") {
     setBlockType(schema.nodes.paragraph)(view.state, view.dispatch);
   }
 }

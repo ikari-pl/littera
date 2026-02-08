@@ -111,7 +111,7 @@ function promptLink(state, dispatch, view) {
 // createEditor — mount EditorView
 // ---------------------------------------------------------------------------
 
-export function createEditor(container, { onDocChange, fetchEntities }) {
+export function createEditor(container, { onDocChange, fetchEntities, onMentionClick }) {
   const doc = schema.nodes.doc.create(null, [
     schema.nodes.littera_block.create(
       { id: "placeholder", block_type: "prose", language: "en" },
@@ -156,6 +156,17 @@ export function createEditor(container, { onDocChange, fetchEntities }) {
       }
     },
   });
+
+  // Delegate clicks on mention pills to the app-level callback
+  if (onMentionClick) {
+    container.addEventListener("click", (e) => {
+      const pill = e.target.closest(".mention-pill");
+      if (pill) {
+        const entityId = pill.getAttribute("data-entity-id");
+        if (entityId) onMentionClick(entityId);
+      }
+    });
+  }
 
   return view;
 }
