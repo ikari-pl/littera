@@ -21,13 +21,9 @@ This phase exists to prevent UI churn from destabilizing the project: if it isn'
 - TUI features / UX polish
 - Desktop app
 
-## Current Status (2026-01-08)
+## Current Status (2026-02-07)
 
-This phase needs a dedicated audit pass.
-
-- Known: schema exists in `db/schema.sql`
-- Known: CLI commands exist for documents and entity notes
-- Not yet checked off here: end-to-end CLI parity tests for everything that TUI does
+✅ **COMPLETE** — All checklist items done. CLI covers full model CRUD including entities, labels, mentions, alignments, and reviews. Black-box test suite runs against real embedded Postgres.
 
 ## Can Start / Can Ship
 

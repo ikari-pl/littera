@@ -28,3 +28,9 @@ Provide a calm, WYSIWYG‑leaning writing environment backed by Littera’s mode
 - UI‑only state
 
 These risks must be actively resisted.
+
+---
+
+## Execution Plan
+
+- [Phase 2 — Desktop App (Detailed Plan)](../plan/phase2-desktop.md) — 2A–2C complete, 2D partial, 2E not started

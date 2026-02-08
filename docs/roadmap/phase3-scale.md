@@ -21,3 +21,9 @@ Ensure Littera scales to decades of writing.
 - No loss of meaning
 
 Longevity is a feature.
+
+---
+
+## Execution Plan
+
+No detailed plan doc yet. Linguistics work (Polish morphology, English surface forms, cross-language alignments) was completed and tracked via beads.

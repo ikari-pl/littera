@@ -16,3 +16,7 @@ The model comes first. Everything else follows.
 - Phase 3 — Scale and Longevity
 
 Each phase assumes the previous phase is stable.
+
+Phase documents define **vision and principles** (the "why").
+Detailed execution checklists live in `docs/plan/` (the "how").
+Phase principles are also encoded in `CLAUDE.md` for agent enforcement.

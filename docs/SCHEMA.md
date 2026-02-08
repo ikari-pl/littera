@@ -145,7 +145,7 @@ Stores review findings and explanations.
 
 - `id` (UUID, PK)
 - `work_id` (UUID, FK → works.id)
-- `scope` (text)  -- work, document, section, block
+- `scope` (text)  -- "work", "document", "section", "block", "entity", "alignment"; NULL for global
 - `scope_id` (UUID)
 - `issue_type` (text)
 - `description` (text)

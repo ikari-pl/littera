@@ -373,59 +373,59 @@ This is a direct port, not a reinvention. The TUI proved the reducer model works
 
 ## 6. Implementation Roadmap
 
-### Phase 2A: Spike (1-2 sessions)
+### Phase 2A: Spike (1-2 sessions) — COMPLETE
 
 **Goal:** Validate the architecture with a minimal proof of concept.
 
-- [ ] Create a minimal Tauri app that spawns the Python sidecar
-- [ ] Python sidecar: expose `/api/status` and `/api/documents` endpoints
-- [ ] Frontend: render document list from API response
-- [ ] Verify: PG starts, data loads, window renders
+- [x] Create a minimal Tauri app that spawns the Python sidecar
+- [x] Python sidecar: expose `/api/status` and `/api/documents` endpoints
+- [x] Frontend: render document list from API response
+- [x] Verify: PG starts, data loads, window renders
 
 **Exit criteria:** Can open a Littera work dir and see the document list in a desktop window.
 
-**This spike resolves `littera-gkn` (technology decision).**
+**This spike resolved `littera-gkn` (technology decision): Tauri v2 confirmed.**
 
-### Phase 2B: Read-Only Navigation (2-3 sessions)
+### Phase 2B: Read-Only Navigation (2-3 sessions) — COMPLETE
 
 **Goal:** Port TUI's navigation to the desktop.
 
-- [ ] Full API surface for reading (documents, sections, blocks, entities)
-- [ ] TypeScript state management (reducer pattern)
-- [ ] Outline sidebar with drill-down navigation
-- [ ] Section view: render blocks as continuous formatted text (read-only ProseMirror)
-- [ ] Entity list and detail panel
+- [x] Full API surface for reading (documents, sections, blocks, entities)
+- [x] TypeScript state management (reducer pattern)
+- [x] Outline sidebar with drill-down navigation
+- [x] Section view: render blocks as continuous formatted text (read-only ProseMirror)
+- [x] Entity list and detail panel
 
 **Exit criteria:** Can navigate the full hierarchy and view all content as formatted text.
 
-### Phase 2C: Block Editing (2-3 sessions)
+### Phase 2C: Block Editing (2-3 sessions) — COMPLETE
 
 **Goal:** Implement the core writing experience.
 
-- [ ] ProseMirror schema with `littera_block` isolating nodes
-- [ ] Custom Markdown serializer and parser (prosemirror-markdown + markdown-it)
-- [ ] Dirty block tracking via structural sharing
-- [ ] Save dirty blocks via `PUT /api/blocks/batch`
-- [ ] New block creation (Shift+Enter)
-- [ ] Block reordering (drag handle)
-- [ ] Create document / section via UI
-- [ ] Undo/redo (ProseMirror's built-in history plugin)
+- [x] ProseMirror schema with `littera_block` isolating nodes
+- [x] Custom Markdown serializer and parser (prosemirror-markdown + markdown-it)
+- [x] Dirty block tracking via structural sharing
+- [x] Save dirty blocks via `PUT /api/blocks/batch`
+- [x] New block creation (Shift+Enter)
+- [ ] Block reordering (drag handle) — deferred
+- [ ] Create document / section via UI — deferred
+- [x] Undo/redo (ProseMirror's built-in history plugin)
 
 **Exit criteria:** Can write and edit content through the desktop app, with changes persisted to PG and visible in CLI/TUI.
 
-### Phase 2D: Mentions and Entities (1-2 sessions)
+### Phase 2D: Mentions and Entities (1-2 sessions) — PARTIAL
 
 **Goal:** Semantic layer in the editor.
 
-- [ ] Mention node type with `{@label|entity:uuid}` Markdown syntax
-- [ ] Mention pill NodeView (styled, non-editable atom)
-- [ ] Entity linking flow (select text, Cmd+L, type name, confirm)
-- [ ] Entity creation from editor
-- [ ] Mention tooltips on hover
+- [x] Mention node type with `{@label|entity:uuid}` Markdown syntax
+- [x] Mention pill NodeView (styled, non-editable atom)
+- [x] Entity linking flow (mention popup with entity search)
+- [ ] Entity creation from editor — deferred
+- [ ] Mention tooltips on hover — deferred
 
 **Exit criteria:** Can link entities to blocks and see mentions as inline pills.
 
-### Phase 2E: Polish and Immersion (2-3 sessions)
+### Phase 2E: Polish and Immersion (2-3 sessions) — NOT STARTED
 
 **Goal:** Make it feel like a real writing tool.
 

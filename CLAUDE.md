@@ -59,6 +59,25 @@ Boring code is a feature.
 
 ---
 
+## Design Principles
+
+These apply universally. Any change to any part of the system must respect all of them.
+
+- Editing never breaks structure
+- All edits are representable via CLI
+- Semantics remain explicit
+- Metadata is hidden, not destroyed
+- Structure persists invisibly
+- Writing flow is prioritized
+- Actively resist accidental model erosion and UI‑only state
+- Performance at large scale
+- Migration and evolution paths must exist
+- Export and archival formats are required
+- No mandatory cloud services
+- Longevity is a feature
+
+---
+
 ## When in Doubt
 
 Ask:

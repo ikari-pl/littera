@@ -88,3 +88,38 @@ def test_review_add_with_type_and_metadata(tmp_path):
         assert "(consistency)" in res.stdout
         assert "[high]" in res.stdout
         assert "Inconsistent naming" in res.stdout
+
+
+def test_review_add_scoped_to_document(tmp_path):
+    """Add a review scoped to a document."""
+    with init_work(tmp_path) as workdir:
+        add_document(workdir, "My Doc")
+
+        res = run(
+            "littera review add 'Document needs restructuring' --scope=document --scope-id=1",
+            cwd=workdir,
+        )
+        assert res.returncode == 0, res.stderr
+        assert "document:1" in res.stdout
+
+
+def test_review_add_scoped_to_section(tmp_path):
+    """Add a review scoped to a section."""
+    with init_work(tmp_path) as workdir:
+        add_document(workdir)
+        add_section(workdir, "Intro")
+
+        res = run(
+            "littera review add 'Section too long' --scope=section --scope-id=1",
+            cwd=workdir,
+        )
+        assert res.returncode == 0, res.stderr
+        assert "section:1" in res.stdout
+
+
+def test_review_add_invalid_scope(tmp_path):
+    """Reject invalid scope value."""
+    with init_work(tmp_path) as workdir:
+        res = run("littera review add 'Bad scope' --scope=paragraph --scope-id=1", cwd=workdir)
+        assert res.returncode != 0
+        assert "Invalid scope" in res.stdout

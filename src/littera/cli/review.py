@@ -11,13 +11,31 @@ import typer
 
 from littera.db.workdb import open_work_db
 
-VALID_SCOPES = {"block", "entity", "alignment"}
+VALID_SCOPES = {"work", "document", "section", "block", "entity", "alignment"}
 VALID_SEVERITIES = {"low", "medium", "high"}
 
 
 def _resolve_scope_id(cur, scope: str, selector: str) -> str:
     """Resolve a scope_id selector using the appropriate resolver."""
-    if scope == "block":
+    if scope == "work":
+        # Work scope_id is the work UUID — just validate it exists
+        cur.execute("SELECT id FROM works WHERE id::text = %s", (selector,))
+        row = cur.fetchone()
+        if not row:
+            print(f"Work not found: {selector}")
+            sys.exit(1)
+        return str(row[0])
+    elif scope == "document":
+        from littera.cli.section import _resolve_document
+
+        doc_id, _ = _resolve_document(cur, selector)
+        return str(doc_id)
+    elif scope == "section":
+        from littera.cli.block import _resolve_section_global
+
+        sec_id, _ = _resolve_section_global(cur, selector)
+        return str(sec_id)
+    elif scope == "block":
         from littera.cli.block import _resolve_block_global
 
         block_id, _, _ = _resolve_block_global(cur, selector)
@@ -33,7 +51,7 @@ def _resolve_scope_id(cur, scope: str, selector: str) -> str:
         alignment_id, _, _ = _resolve_alignment(cur, selector)
         return str(alignment_id)
     else:
-        print(f"Invalid scope: {scope} (must be block, entity, or alignment)")
+        print(f"Invalid scope: {scope}")
         sys.exit(1)
 
 
@@ -85,7 +103,7 @@ def register(app: typer.Typer) -> None:
             sys.exit(1)
 
         if scope and scope not in VALID_SCOPES:
-            print(f"Invalid scope: {scope} (must be block, entity, or alignment)")
+            print(f"Invalid scope: {scope} (must be one of: {', '.join(sorted(VALID_SCOPES))})")
             sys.exit(1)
 
         if scope_id and not scope:

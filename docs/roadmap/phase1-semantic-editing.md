@@ -28,3 +28,10 @@ Enable meaningful editing while preserving structure and semantics.
 - Editing never breaks structure
 - All edits are representable via CLI
 - Semantics remain explicit
+
+---
+
+## Execution Plans
+
+- [Phase 1A — Core (Schema + CLI)](../plan/phase1a-core.md) ✅ Complete
+- [Phase 1B — TUI Layer](../plan/phase1b-tui.md) ✅ Complete
