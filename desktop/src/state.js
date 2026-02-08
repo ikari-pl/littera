@@ -32,6 +32,7 @@ export const initialState = {
   zenMode: false,          // distraction-free mode (hides sidebar/chrome)
   // Entity label add mode
   addingLabel: false,
+  commandPaletteOpen: false, // Cmd+K command palette
 };
 
 export function reduce(state, action) {
@@ -171,6 +172,12 @@ export function reduce(state, action) {
 
     case "stop-add-label":
       return { ...state, addingLabel: false };
+
+    case "open-command-palette":
+      return { ...state, commandPaletteOpen: true };
+
+    case "close-command-palette":
+      return { ...state, commandPaletteOpen: false };
 
     default:
       return state;
