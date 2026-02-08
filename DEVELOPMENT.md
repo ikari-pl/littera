@@ -225,6 +225,31 @@ desktop/
 
 ---
 
+## Building for Distribution
+
+### macOS DMG
+
+A convenience script handles the full release build:
+
+```
+cd desktop
+./build-dmg.sh
+```
+
+The DMG will be at `desktop/src-tauri/target/release/bundle/dmg/`.
+
+**Prerequisites:**
+- `cargo install tauri-cli` (Tauri CLI)
+- Icons in `desktop/src-tauri/icons/` (generate with `cargo tauri icon source.png`)
+- Python venv at project root with `littera` installed
+
+**Note:** The current build uses ad-hoc signing (`signingIdentity: null`). This works for local development and testing but macOS Gatekeeper will warn on first launch. For distribution outside the Mac App Store, you will need:
+1. An Apple Developer ID certificate
+2. Set `signingIdentity` in `tauri.conf.json`
+3. Run notarization via `xcrun notarytool`
+
+---
+
 ## Project Structure
 
 ```

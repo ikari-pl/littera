@@ -5,6 +5,28 @@
   "build": {
     "frontendDist": "../src"
   },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "frameworks": [],
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "entitlements": null
+    },
+    "category": "Productivity",
+    "shortDescription": "Local-first writing system for long-form thinking",
+    "longDescription": "Littera is a local-first writing system designed for essays, books, and research. It combines structural editing with semantic entities and multi-language support.",
+    "resources": []
+  },
   "app": {
     "withGlobalTauri": true,
     "windows": [
@@ -12,7 +34,9 @@
         "label": "main",
         "title": "Littera",
         "width": 900,
-        "height": 700
+        "height": 700,
+        "minWidth": 600,
+        "minHeight": 400
       }
     ],
     "security": {
