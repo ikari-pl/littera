@@ -110,6 +110,58 @@ def delete_entity(db, entity_id: str) -> None:
 
 
 # =============================================================================
+# Reordering
+# =============================================================================
+
+def move_item(db, kind: str, item_id: str, new_position: int) -> bool:
+    """Move a document or section to a new position (1-based).
+
+    For documents: reorders among siblings in the same work.
+    For sections: reorders among siblings in the same document.
+
+    Returns True if the move was applied, False if position is out of range.
+    """
+    with db.cursor() as cur:
+        if kind == "document":
+            # Get siblings: all documents in the same work
+            cur.execute(
+                "SELECT id FROM documents "
+                "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
+                "ORDER BY order_index NULLS LAST, created_at",
+                (item_id,),
+            )
+        elif kind == "section":
+            # Get siblings: all sections in the same document
+            cur.execute(
+                "SELECT id FROM sections "
+                "WHERE document_id = (SELECT document_id FROM sections WHERE id = %s) "
+                "ORDER BY order_index NULLS LAST, created_at",
+                (item_id,),
+            )
+        else:
+            return False
+
+        ids = [str(r[0]) for r in cur.fetchall()]
+
+        if new_position < 1 or new_position > len(ids):
+            return False
+
+        # Remove target, insert at new position
+        ids.remove(str(item_id))
+        ids.insert(new_position - 1, str(item_id))
+
+        # Bulk update order_index
+        table = "documents" if kind == "document" else "sections"
+        for idx, row_id in enumerate(ids, 1):
+            cur.execute(
+                f"UPDATE {table} SET order_index = %s WHERE id = %s",
+                (idx, row_id),
+            )
+    db.commit()
+    return True
+
+
+# =============================================================================
 # Updates
 # =============================================================================
 

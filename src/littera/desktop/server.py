@@ -27,10 +27,12 @@ from littera.db.workdb import open_work_db, WorkDb
 ROUTES = [
     (re.compile(r"^/api/documents$"), "GET", "_get_documents"),
     (re.compile(r"^/api/documents$"), "POST", "_post_document"),
+    (re.compile(r"^/api/documents/([^/]+)/order$"), "PUT", "_put_document_order"),
     (re.compile(r"^/api/documents/([^/]+)$"), "PUT", "_put_document"),
     (re.compile(r"^/api/documents/([^/]+)$"), "DELETE", "_delete_document"),
     (re.compile(r"^/api/documents/([^/]+)/sections$"), "GET", "_get_sections"),
     (re.compile(r"^/api/sections$"), "POST", "_post_section"),
+    (re.compile(r"^/api/sections/([^/]+)/order$"), "PUT", "_put_section_order"),
     (re.compile(r"^/api/sections/([^/]+)$"), "PUT", "_put_section"),
     (re.compile(r"^/api/sections/([^/]+)$"), "DELETE", "_delete_section"),
     (re.compile(r"^/api/sections/([^/]+)/blocks$"), "GET", "_get_blocks"),
@@ -103,14 +105,14 @@ class SidecarHandler(BaseHTTPRequestHandler):
     def _get_documents(self):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, title FROM documents ORDER BY order_index, created_at"
+                "SELECT id, title FROM documents ORDER BY order_index NULLS LAST, created_at"
             )
             return [{"id": str(r[0]), "title": r[1]} for r in cur.fetchall()]
 
     def _get_sections(self, document_id: str):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index",
+                "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index NULLS LAST, created_at",
                 (document_id,),
             )
             return [{"id": str(r[0]), "title": r[1]} for r in cur.fetchall()]
@@ -264,6 +266,70 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 "UPDATE sections SET title = %s WHERE id = %s",
                 (title, section_id),
             )
+        conn.commit()
+        return {"ok": True}
+
+    def _put_document_order(self, document_id: str):
+        body = self._read_json_body()
+        position = body.get("position")
+        if position is None or not isinstance(position, int):
+            return {"error": "position (integer) required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            # Get all sibling documents in current order
+            cur.execute(
+                "SELECT id FROM documents "
+                "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
+                "ORDER BY order_index NULLS LAST, created_at",
+                (document_id,),
+            )
+            ids = [str(r[0]) for r in cur.fetchall()]
+
+            if str(document_id) not in ids:
+                return {"error": "document not found"}
+            if position < 1 or position > len(ids):
+                return {"error": f"position must be between 1 and {len(ids)}"}
+
+            ids.remove(str(document_id))
+            ids.insert(position - 1, str(document_id))
+
+            for idx, did in enumerate(ids, 1):
+                cur.execute(
+                    "UPDATE documents SET order_index = %s WHERE id = %s",
+                    (idx, did),
+                )
+        conn.commit()
+        return {"ok": True}
+
+    def _put_section_order(self, section_id: str):
+        body = self._read_json_body()
+        position = body.get("position")
+        if position is None or not isinstance(position, int):
+            return {"error": "position (integer) required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            # Get all sibling sections in current order
+            cur.execute(
+                "SELECT id FROM sections "
+                "WHERE document_id = (SELECT document_id FROM sections WHERE id = %s) "
+                "ORDER BY order_index NULLS LAST, created_at",
+                (section_id,),
+            )
+            ids = [str(r[0]) for r in cur.fetchall()]
+
+            if str(section_id) not in ids:
+                return {"error": "section not found"}
+            if position < 1 or position > len(ids):
+                return {"error": f"position must be between 1 and {len(ids)}"}
+
+            ids.remove(str(section_id))
+            ids.insert(position - 1, str(section_id))
+
+            for idx, sid in enumerate(ids, 1):
+                cur.execute(
+                    "UPDATE sections SET order_index = %s WHERE id = %s",
+                    (idx, sid),
+                )
         conn.commit()
         return {"ok": True}
 

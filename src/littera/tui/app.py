@@ -89,6 +89,8 @@ class LitteraApp(App):
         ("g", "show_gaps", "Show Gaps"),
         ("R", "reviews", "Reviews"),
         ("S", "set_surface", "Set Surface"),
+        ("ctrl+up", "move_up", "Move Up"),
+        ("ctrl+down", "move_down", "Move Down"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -308,6 +310,46 @@ class LitteraApp(App):
         if self.state.outline.path:
             self.state.dispatch(OutlinePop())
             self._render_view()
+
+    # =====================
+    # Reordering
+    # =====================
+
+    @safe_action
+    def action_move_up(self) -> None:
+        """Move selected document or section up by one position."""
+        self._move_selected(-1)
+
+    @safe_action
+    def action_move_down(self) -> None:
+        """Move selected document or section down by one position."""
+        self._move_selected(+1)
+
+    def _move_selected(self, direction: int) -> None:
+        """Move the selected item up (-1) or down (+1)."""
+        if self.state is None or self.state.view != "outline":
+            return
+
+        sel = self.state.entity_selection
+        if not sel.id or sel.kind not in ("document", "section"):
+            return
+
+        # Find current position among siblings
+        items = self.state.outline.items
+        current_idx = None
+        for i, item in enumerate(items):
+            if item.id == sel.id:
+                current_idx = i
+                break
+        if current_idx is None:
+            return
+
+        new_position = current_idx + 1 + direction  # 1-based
+        if new_position < 1 or new_position > len(items):
+            return
+
+        actions.move_item(self.state.db, sel.kind, sel.id, new_position)
+        self._render_view()
 
     # =====================
     # Creation
