@@ -269,7 +269,6 @@ const handlers = {
 
   onTabClick(view) {
     if (!checkDirtyBeforeNav()) return;
-    // Close editor before switching views to clear editing state
     const state = store.getState();
     if (state.editing) {
       store.dispatch({ type: "editor-close" });
@@ -277,6 +276,10 @@ const handlers = {
     store.dispatch({ type: "set-view", view });
     if (view === "entities") {
       loadEntities();
+    } else if (view === "alignments") {
+      loadAlignments();
+    } else if (view === "reviews") {
+      loadReviews();
     } else {
       loadLevel();
     }
@@ -488,6 +491,44 @@ const handlers = {
       store.dispatch({ type: "error", message: err.message });
     }
   },
+
+  async onDeleteAlignment(alignmentId) {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    try {
+      await api.deleteAlignment(port, alignmentId);
+      await loadAlignments();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onAddReview() {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    const description = window.prompt("Review description:");
+    if (!description) return;
+    const severity = window.prompt("Severity (low/medium/high):", "medium");
+    if (!severity) return;
+    try {
+      await api.createReview(port, description, { severity });
+      await loadReviews();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onDeleteReview(reviewId) {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    if (!window.confirm("Delete this review?")) return;
+    try {
+      await api.deleteReview(port, reviewId);
+      await loadReviews();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -566,6 +607,30 @@ async function loadEntityDetail(entityId) {
   try {
     const detail = await withRetry(() => api.fetchEntity(port, entityId));
     store.dispatch({ type: "set-entity-detail", detail });
+  } catch (err) {
+    store.dispatch({ type: "error", message: err.message });
+  }
+}
+
+async function loadAlignments() {
+  const port = store.getState().sidecarPort;
+  if (!port) return;
+  store.dispatch({ type: "loading" });
+  try {
+    const alignments = await api.fetchAlignments(port);
+    store.dispatch({ type: "set-alignments", alignments });
+  } catch (err) {
+    store.dispatch({ type: "error", message: err.message });
+  }
+}
+
+async function loadReviews() {
+  const port = store.getState().sidecarPort;
+  if (!port) return;
+  store.dispatch({ type: "loading" });
+  try {
+    const reviews = await api.fetchReviews(port);
+    store.dispatch({ type: "set-reviews", reviews });
   } catch (err) {
     store.dispatch({ type: "error", message: err.message });
   }

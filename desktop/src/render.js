@@ -226,6 +226,8 @@ function ensureAppLayout() {
       <div id="tab-bar">
         <button id="tab-outline" class="tab tab-active">Outline</button>
         <button id="tab-entities" class="tab">Entities</button>
+        <button id="tab-alignments" class="tab">Align</button>
+        <button id="tab-reviews" class="tab">Reviews</button>
       </div>
     </aside>
     <main id="content">
@@ -274,15 +276,14 @@ function renderBreadcrumb(state, handlers) {
 // ---------------------------------------------------------------------------
 
 function renderTabs(state, handlers) {
-  const outlineTab = document.getElementById("tab-outline");
-  const entitiesTab = document.getElementById("tab-entities");
-
-  outlineTab.classList.toggle("tab-active", state.view === "outline");
-  entitiesTab.classList.toggle("tab-active", state.view === "entities");
-
-  // Re-bind (simple approach for read-only phase)
-  outlineTab.onclick = () => handlers.onTabClick("outline");
-  entitiesTab.onclick = () => handlers.onTabClick("entities");
+  const tabs = ["outline", "entities", "alignments", "reviews"];
+  for (const t of tabs) {
+    const el = document.getElementById(`tab-${t}`);
+    if (el) {
+      el.classList.toggle("tab-active", state.view === t);
+      el.onclick = () => handlers.onTabClick(t);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +295,9 @@ function renderSidebarActions(state, handlers) {
   if (!el) return;
   el.innerHTML = "";
 
-  if (state.view === "entities") {
+  if (state.view === "alignments" || state.view === "reviews") {
+    // No sidebar actions for alignment/review views
+  } else if (state.view === "entities") {
     const addBtn = document.createElement("button");
     addBtn.className = "sidebar-action-btn";
     addBtn.textContent = "+";
@@ -478,6 +481,18 @@ function renderContent(state, handlers) {
   if (state.view === "entities" && state.entityDetail) {
     const detailWithId = { ...state.entityDetail, _entityId: state.selectedEntityId, _addingLabel: state.addingLabel, _addingProperty: state.addingProperty };
     renderEntityDetail(el, detailWithId, handlers);
+    return;
+  }
+
+  // Alignment list view
+  if (state.view === "alignments") {
+    renderAlignmentList(el, state, handlers);
+    return;
+  }
+
+  // Review list view
+  if (state.view === "reviews") {
+    renderReviewList(el, state, handlers);
     return;
   }
 
@@ -909,6 +924,151 @@ function renderEntityDetail(el, detail, handlers) {
       section.appendChild(row);
     }
     el.appendChild(section);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Alignment list
+// ---------------------------------------------------------------------------
+
+function renderAlignmentList(el, state, handlers) {
+  el.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "entity-section-header";
+  const h2 = document.createElement("h2");
+  h2.textContent = "Block Alignments";
+  h2.style.fontSize = "1.2rem";
+  h2.style.fontWeight = "500";
+  header.appendChild(h2);
+  el.appendChild(header);
+
+  if (state.loading) {
+    el.innerHTML += '<div class="content-placeholder">Loading\u2026</div>';
+    return;
+  }
+
+  if (state.alignments.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "entity-note-empty";
+    empty.textContent = "No alignments yet. Create alignments via the CLI: littera alignment add <source> <target>";
+    el.appendChild(empty);
+    return;
+  }
+
+  for (const a of state.alignments) {
+    const row = document.createElement("div");
+    row.className = "alignment-row";
+
+    const source = document.createElement("div");
+    source.className = "alignment-block";
+    source.innerHTML = `<span class="lang-badge">${escapeHtml(a.source.language)}</span> ${escapeHtml(a.source.preview)}`;
+    row.appendChild(source);
+
+    const arrow = document.createElement("span");
+    arrow.className = "alignment-arrow";
+    arrow.textContent = "\u2194";
+    row.appendChild(arrow);
+
+    const target = document.createElement("div");
+    target.className = "alignment-block";
+    target.innerHTML = `<span class="lang-badge">${escapeHtml(a.target.language)}</span> ${escapeHtml(a.target.preview)}`;
+    row.appendChild(target);
+
+    const typeBadge = document.createElement("span");
+    typeBadge.className = "entity-badge";
+    typeBadge.textContent = a.alignment_type || "translation";
+    row.appendChild(typeBadge);
+
+    if (handlers && handlers.onDeleteAlignment) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "alignment-delete-btn";
+      delBtn.textContent = "\u00d7";
+      delBtn.title = "Delete alignment";
+      delBtn.addEventListener("click", () => handlers.onDeleteAlignment(a.id));
+      row.appendChild(delBtn);
+    }
+
+    el.appendChild(row);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Review list
+// ---------------------------------------------------------------------------
+
+function renderReviewList(el, state, handlers) {
+  el.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "entity-section-header";
+  const h2 = document.createElement("h2");
+  h2.textContent = "Reviews";
+  h2.style.fontSize = "1.2rem";
+  h2.style.fontWeight = "500";
+  header.appendChild(h2);
+
+  if (handlers && handlers.onAddReview) {
+    const addBtn = document.createElement("button");
+    addBtn.className = "entity-action-btn";
+    addBtn.textContent = "Add";
+    addBtn.addEventListener("click", () => handlers.onAddReview());
+    header.appendChild(addBtn);
+  }
+
+  el.appendChild(header);
+
+  if (state.loading) {
+    el.innerHTML += '<div class="content-placeholder">Loading\u2026</div>';
+    return;
+  }
+
+  if (state.reviews.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "entity-note-empty";
+    empty.textContent = "No reviews yet.";
+    el.appendChild(empty);
+    return;
+  }
+
+  for (const r of state.reviews) {
+    const row = document.createElement("div");
+    row.className = "review-row";
+
+    const severity = document.createElement("span");
+    severity.className = `review-severity review-severity-${r.severity || "medium"}`;
+    severity.textContent = r.severity || "medium";
+    row.appendChild(severity);
+
+    if (r.scope) {
+      const scope = document.createElement("span");
+      scope.className = "entity-badge";
+      scope.textContent = r.scope;
+      row.appendChild(scope);
+    }
+
+    if (r.issue_type) {
+      const issueType = document.createElement("span");
+      issueType.className = "entity-badge";
+      issueType.textContent = r.issue_type;
+      row.appendChild(issueType);
+    }
+
+    const desc = document.createElement("span");
+    desc.className = "review-description";
+    desc.textContent = (r.description || "").replace("\n", " ").slice(0, 100);
+    row.appendChild(desc);
+
+    if (handlers && handlers.onDeleteReview) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "review-delete-btn";
+      delBtn.textContent = "\u00d7";
+      delBtn.title = "Delete review";
+      delBtn.addEventListener("click", () => handlers.onDeleteReview(r.id));
+      row.appendChild(delBtn);
+    }
+
+    el.appendChild(row);
   }
 }
 

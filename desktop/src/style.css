@@ -1474,3 +1474,130 @@ body {
   letter-spacing: 0.06em;
   padding: 6px 12px 2px;
 }
+
+/* ==========================================================================
+   Alignment view
+   ========================================================================== */
+
+.alignment-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.alignment-row:last-child {
+  border-bottom: none;
+}
+
+.alignment-block {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-dim);
+}
+
+.alignment-arrow {
+  color: var(--muted);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.alignment-delete-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.alignment-row:hover .alignment-delete-btn {
+  opacity: 1;
+}
+
+.alignment-delete-btn:hover {
+  color: var(--error);
+}
+
+/* ==========================================================================
+   Review view
+   ========================================================================== */
+
+.review-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.review-row:last-child {
+  border-bottom: none;
+}
+
+.review-severity {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.review-severity-low {
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+}
+
+.review-severity-medium {
+  background: rgba(200, 160, 60, 0.2);
+  color: #c8a03c;
+}
+
+.review-severity-high {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.review-description {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-dim);
+}
+
+.review-delete-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.review-row:hover .review-delete-btn {
+  opacity: 1;
+}
+
+.review-delete-btn:hover {
+  color: var(--error);
+}
+
+:root[data-theme="light"] .review-severity-medium {
+  background: rgba(180, 140, 40, 0.15);
+  color: #8a6e20;
+}
