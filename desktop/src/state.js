@@ -191,6 +191,13 @@ export function reduce(state, action) {
     case "set-theme":
       return { ...state, theme: action.theme };
 
+    case "return-to-picker":
+      return {
+        ...initialState,
+        pickerData: state.pickerData,
+        theme: state.theme,
+      };
+
     default:
       return state;
   }

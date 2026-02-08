@@ -219,6 +219,40 @@ const handlers = {
     }
   },
 
+  async onSwitchWork() {
+    // Check for unsaved changes
+    if (!checkDirtyBeforeNav()) return;
+
+    // Close editor if active
+    const state = store.getState();
+    if (state.editing) {
+      store.dispatch({ type: "editor-close" });
+      if (editorView) {
+        editorView.destroy();
+        editorView = null;
+        pendingBlocks = null;
+      }
+    }
+
+    // Close the sidecar (stop Python + PG)
+    try {
+      await invoke("close_work");
+    } catch (err) {
+      console.warn("close_work failed:", err);
+    }
+
+    // Return to picker
+    store.dispatch({ type: "return-to-picker" });
+
+    // Refresh picker data (recents may have changed)
+    try {
+      const data = await invoke("get_picker_data");
+      store.dispatch({ type: "set-picker-data", data });
+    } catch (err) {
+      store.dispatch({ type: "picker-error", message: `Failed to load: ${err}` });
+    }
+  },
+
   onThemeToggle() {
     const state = store.getState();
     // Cycle: system (null) → light → dark → system (null)

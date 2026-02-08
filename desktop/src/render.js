@@ -32,6 +32,12 @@ export function render(state, handlers) {
   renderCommandPalette(state, handlers);
   renderThemeToggle(state, handlers);
 
+  // Bind switch-work button
+  const switchBtn = document.getElementById("switch-work-btn");
+  if (switchBtn && handlers.onSwitchWork) {
+    switchBtn.onclick = () => handlers.onSwitchWork();
+  }
+
   // Zen mode: toggle class on #app to hide sidebar/chrome via CSS
   const app = document.getElementById("app");
   app.classList.toggle("zen-mode", state.zenMode);
@@ -218,7 +224,10 @@ function ensureAppLayout() {
     <aside id="sidebar">
       <div id="sidebar-header">
         <h1>Littera</h1>
-        <button id="theme-toggle">auto</button>
+        <div id="sidebar-header-actions">
+          <button id="switch-work-btn" title="Switch work">\u21c4</button>
+          <button id="theme-toggle">auto</button>
+        </div>
       </div>
       <nav id="breadcrumb"></nav>
       <div id="sidebar-actions"></div>
