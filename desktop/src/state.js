@@ -30,6 +30,7 @@ export const initialState = {
   savedDoc: null,          // ProseMirror doc at last save (for dirty tracking)
   dirty: false,            // unsaved changes exist
   zenMode: false,          // distraction-free mode (hides sidebar/chrome)
+  commandPaletteOpen: false, // Cmd+K command palette
 };
 
 export function reduce(state, action) {
@@ -162,6 +163,12 @@ export function reduce(state, action) {
 
     case "toggle-zen":
       return { ...state, zenMode: !state.zenMode };
+
+    case "open-command-palette":
+      return { ...state, commandPaletteOpen: true };
+
+    case "close-command-palette":
+      return { ...state, commandPaletteOpen: false };
 
     default:
       return state;

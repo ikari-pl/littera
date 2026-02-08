@@ -112,6 +112,18 @@ const handlers = {
   // Picker handlers (merged in)
   ...pickerHandlers,
 
+  // Command palette handlers
+  onClosePalette() {
+    store.dispatch({ type: "close-command-palette" });
+  },
+
+  onExecuteCommand(cmd) {
+    store.dispatch({ type: "close-command-palette" });
+    if (cmd.action) {
+      cmd.action({ store, handlers, api });
+    }
+  },
+
   onItemClick(item) {
     const state = store.getState();
 
@@ -452,6 +464,18 @@ window.addEventListener("beforeunload", (e) => {
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", async (e) => {
+  // Cmd+K: toggle command palette
+  if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+    e.preventDefault();
+    const state = store.getState();
+    if (state.phase === "ready") {
+      store.dispatch({
+        type: state.commandPaletteOpen ? "close-command-palette" : "open-command-palette",
+      });
+    }
+    return;
+  }
+
   // Cmd+Shift+F: toggle zen mode (only while editing)
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f") {
     e.preventDefault();

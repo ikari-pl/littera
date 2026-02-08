@@ -5,6 +5,8 @@
  * No fetches, no side effects beyond DOM mutation.
  */
 
+import { commands } from "./commands.js";
+
 // ---------------------------------------------------------------------------
 // Main render entry point — branches on phase
 // ---------------------------------------------------------------------------
@@ -27,6 +29,7 @@ export function render(state, handlers) {
   renderSidebar(state, handlers);
   renderContent(state, handlers);
   renderError(state);
+  renderCommandPalette(state, handlers);
 
   // Zen mode: toggle class on #app to hide sidebar/chrome via CSS
   const app = document.getElementById("app");
@@ -652,6 +655,189 @@ function renderEntityDetail(el, detail, handlers) {
     }
     el.appendChild(section);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Command Palette (Cmd+K)
+// ---------------------------------------------------------------------------
+
+/** Track palette state for keyboard navigation */
+let paletteSelectedIndex = 0;
+let paletteQuery = "";
+
+/**
+ * Filter commands by query string, matching against label.
+ * Returns commands grouped by category in display order.
+ */
+function filterCommands(query) {
+  const q = query.toLowerCase().trim();
+  if (!q) return commands.filter((c) => c.action !== null);
+  return commands.filter(
+    (c) => c.action !== null && c.label.toLowerCase().includes(q)
+  );
+}
+
+function renderCommandPalette(state, handlers) {
+  const existing = document.querySelector(".command-palette-backdrop");
+
+  if (!state.commandPaletteOpen) {
+    if (existing) existing.remove();
+    paletteSelectedIndex = 0;
+    paletteQuery = "";
+    return;
+  }
+
+  // Build or reuse backdrop
+  let backdrop = existing;
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.className = "command-palette-backdrop";
+    backdrop.addEventListener("mousedown", (e) => {
+      // Close when clicking the backdrop itself (not the palette)
+      if (e.target === backdrop) {
+        handlers.onClosePalette();
+      }
+    });
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = "";
+
+  const palette = document.createElement("div");
+  palette.className = "command-palette";
+
+  // Search input
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "command-palette-input";
+  input.placeholder = "Type a command\u2026";
+  input.value = paletteQuery;
+  palette.appendChild(input);
+
+  // Filtered command list
+  const filtered = filterCommands(paletteQuery);
+
+  // Clamp selected index
+  if (paletteSelectedIndex >= filtered.length) {
+    paletteSelectedIndex = Math.max(0, filtered.length - 1);
+  }
+
+  const list = document.createElement("div");
+  list.className = "command-palette-list";
+
+  // Group by category
+  let lastCategory = null;
+  for (let i = 0; i < filtered.length; i++) {
+    const cmd = filtered[i];
+
+    if (cmd.category !== lastCategory) {
+      const catEl = document.createElement("div");
+      catEl.className = "command-category";
+      catEl.textContent = cmd.category;
+      list.appendChild(catEl);
+      lastCategory = cmd.category;
+    }
+
+    const item = document.createElement("div");
+    item.className = "command-item";
+    if (i === paletteSelectedIndex) item.classList.add("selected");
+
+    const label = document.createElement("span");
+    label.className = "command-item-label";
+    label.textContent = cmd.label;
+    item.appendChild(label);
+
+    if (cmd.shortcut) {
+      const shortcut = document.createElement("span");
+      shortcut.className = "command-item-shortcut";
+      shortcut.textContent = cmd.shortcut;
+      item.appendChild(shortcut);
+    }
+
+    // Click to execute
+    const idx = i;
+    item.addEventListener("click", () => {
+      handlers.onExecuteCommand(filtered[idx]);
+    });
+
+    // Hover updates selection
+    item.addEventListener("mouseenter", () => {
+      paletteSelectedIndex = idx;
+      // Update selected class without full re-render
+      const items = list.querySelectorAll(".command-item");
+      items.forEach((el, j) => el.classList.toggle("selected", j === idx));
+    });
+
+    list.appendChild(item);
+  }
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "command-item";
+    empty.style.color = "var(--muted)";
+    empty.style.cursor = "default";
+    empty.textContent = "No matching commands";
+    list.appendChild(empty);
+  }
+
+  palette.appendChild(list);
+  backdrop.appendChild(palette);
+
+  // Keyboard handling on the input
+  input.addEventListener("input", () => {
+    paletteQuery = input.value;
+    paletteSelectedIndex = 0;
+    // Re-render the palette with updated filter
+    renderCommandPalette(state, handlers);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    const currentFiltered = filterCommands(paletteQuery);
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      handlers.onClosePalette();
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (currentFiltered.length > 0) {
+        paletteSelectedIndex = (paletteSelectedIndex + 1) % currentFiltered.length;
+        const items = list.querySelectorAll(".command-item");
+        items.forEach((el, j) => el.classList.toggle("selected", j === paletteSelectedIndex));
+        // Scroll selected item into view
+        const sel = list.querySelector(".command-item.selected");
+        if (sel) sel.scrollIntoView({ block: "nearest" });
+      }
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (currentFiltered.length > 0) {
+        paletteSelectedIndex = (paletteSelectedIndex - 1 + currentFiltered.length) % currentFiltered.length;
+        const items = list.querySelectorAll(".command-item");
+        items.forEach((el, j) => el.classList.toggle("selected", j === paletteSelectedIndex));
+        const sel = list.querySelector(".command-item.selected");
+        if (sel) sel.scrollIntoView({ block: "nearest" });
+      }
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (currentFiltered.length > 0 && paletteSelectedIndex < currentFiltered.length) {
+        handlers.onExecuteCommand(currentFiltered[paletteSelectedIndex]);
+      }
+      return;
+    }
+  });
+
+  // Auto-focus input after DOM insertion
+  requestAnimationFrame(() => {
+    input.focus();
+  });
 }
 
 // ---------------------------------------------------------------------------
