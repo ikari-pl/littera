@@ -84,3 +84,31 @@ export function createBlock(port, sectionId, opts = {}) {
 export function deleteBlock(port, blockId) {
   return del(port, `/api/blocks/${blockId}`);
 }
+
+export function createDocument(port, title) {
+  return post(port, "/api/documents", { title });
+}
+
+export function deleteDocument(port, id) {
+  return del(port, `/api/documents/${id}`);
+}
+
+export function createSection(port, documentId, title) {
+  return post(port, "/api/sections", { document_id: documentId, title });
+}
+
+export function deleteSection(port, id) {
+  return del(port, `/api/sections/${id}`);
+}
+
+export function createEntity(port, entityType, label) {
+  return post(port, "/api/entities", { entity_type: entityType, label });
+}
+
+export function deleteEntity(port, id) {
+  return del(port, `/api/entities/${id}`);
+}
+
+export function saveEntityNote(port, entityId, note) {
+  return put(port, `/api/entities/${entityId}/note`, { note });
+}

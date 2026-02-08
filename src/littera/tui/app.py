@@ -71,6 +71,12 @@ class LitteraApp(App):
         ("ctrl+s", "save", "Save"),
         ("ctrl+z", "undo", "Undo"),
         ("ctrl+y", "redo", "Redo"),
+        ("L", "add_label", "Add Label"),
+        ("ctrl+shift+l", "delete_label", "Delete Label"),
+        ("p", "set_property", "Set Property"),
+        ("ctrl+shift+p", "delete_property", "Delete Property"),
+        ("M", "show_mentions", "Show Mentions"),
+        ("ctrl+shift+d", "delete_mention", "Delete Mention"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -449,6 +455,178 @@ class LitteraApp(App):
 
         self.push_screen(
             InputDialog("Link to Entity", "Entity Name:", ""), on_name_result
+        )
+
+    # =====================
+    # Entity labels & properties
+    # =====================
+
+    @safe_action
+    def action_add_label(self) -> None:
+        """Add a label to the selected entity."""
+        if self.state is None or self.state.view != "entities":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "entity" or not sel.id:
+            return
+
+        entity_id = sel.id
+
+        async def on_lang_result(language: str | None) -> None:
+            if not language:
+                return
+
+            async def on_form_result(base_form: str | None) -> None:
+                if not base_form:
+                    return
+                actions.add_entity_label(self.state.db, entity_id, language, base_form)
+                self._render_view()
+
+            self.push_screen(
+                InputDialog("Add Label", "Base form:", ""),
+                on_form_result,
+            )
+
+        self.push_screen(
+            InputDialog("Add Label", "Language (e.g. en, pl):", ""),
+            on_lang_result,
+        )
+
+    @safe_action
+    def action_delete_label(self) -> None:
+        """Delete a label from the selected entity by language."""
+        if self.state is None or self.state.view != "entities":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "entity" or not sel.id:
+            return
+
+        entity_id = sel.id
+
+        async def on_lang_result(language: str | None) -> None:
+            if not language:
+                return
+            deleted = actions.delete_entity_label(self.state.db, entity_id, language)
+            if deleted:
+                self.notify(f"Label deleted ({language})")
+            else:
+                self.notify(f"No {language} label found", severity="warning")
+            self._render_view()
+
+        self.push_screen(
+            InputDialog("Delete Label", "Language to delete:", ""),
+            on_lang_result,
+        )
+
+    @safe_action
+    def action_set_property(self) -> None:
+        """Set a property on the selected entity."""
+        if self.state is None or self.state.view != "entities":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "entity" or not sel.id:
+            return
+
+        entity_id = sel.id
+
+        async def on_kv_result(kv: str | None) -> None:
+            if not kv or "=" not in kv:
+                if kv:
+                    self.notify("Format: key=value", severity="warning")
+                return
+            key, value = kv.split("=", 1)
+            actions.set_entity_property(self.state.db, entity_id, key, value)
+            self.notify(f"Property set: {key}={value}")
+            self._render_view()
+
+        self.push_screen(
+            InputDialog("Set Property", "key=value:", ""),
+            on_kv_result,
+        )
+
+    @safe_action
+    def action_delete_property(self) -> None:
+        """Delete a property from the selected entity."""
+        if self.state is None or self.state.view != "entities":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "entity" or not sel.id:
+            return
+
+        entity_id = sel.id
+
+        async def on_key_result(key: str | None) -> None:
+            if not key:
+                return
+            deleted = actions.delete_entity_property(self.state.db, entity_id, key)
+            if deleted:
+                self.notify(f"Property deleted: {key}")
+            else:
+                self.notify(f"Property '{key}' not found", severity="warning")
+            self._render_view()
+
+        self.push_screen(
+            InputDialog("Delete Property", "Property key:", ""),
+            on_key_result,
+        )
+
+    # =====================
+    # Mention management
+    # =====================
+
+    @safe_action
+    def action_show_mentions(self) -> None:
+        """Show mentions for the selected block in detail panel."""
+        if self.state is None or self.state.view != "outline":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "block" or not sel.id:
+            return
+
+        mentions = queries.fetch_block_mentions(self.state.db, sel.id)
+        if not mentions:
+            self.notify("No mentions for this block")
+            return
+
+        lines = ["Mentions for this block:", ""]
+        for i, (mid, etype, elabel, lang) in enumerate(mentions, 1):
+            lines.append(f"  {i}. {etype} {elabel} ({lang})")
+        lines.append("")
+        lines.append("ctrl+shift+d: delete mention by number")
+
+        self.state.outline.detail = "\n".join(lines)
+        self._render_view()
+
+    @safe_action
+    def action_delete_mention(self) -> None:
+        """Delete a mention from the selected block by number."""
+        if self.state is None or self.state.view != "outline":
+            return
+        sel = self.state.entity_selection
+        if sel.kind != "block" or not sel.id:
+            return
+
+        block_id = sel.id
+        mentions = queries.fetch_block_mentions(self.state.db, block_id)
+        if not mentions:
+            self.notify("No mentions to delete")
+            return
+
+        async def on_num_result(num_str: str | None) -> None:
+            if not num_str or not num_str.isdigit():
+                return
+            idx = int(num_str)
+            if idx < 1 or idx > len(mentions):
+                self.notify(f"Invalid mention number (1-{len(mentions)})", severity="warning")
+                return
+            mention_id = mentions[idx - 1][0]
+            actions.delete_mention(self.state.db, mention_id)
+            self.notify("Mention deleted")
+            self._render_view()
+
+        self.push_screen(
+            InputDialog("Delete Mention", f"Mention # (1-{len(mentions)}):", ""),
+            on_num_result,
         )
 
     # =====================

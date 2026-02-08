@@ -92,7 +92,13 @@ def _outline_detail(cur, sel) -> str:
         row = cur.fetchone()
         if row:
             lang, text = row
-            return f"Block ({lang})\n\n{text}\n\nEnter: edit  l: link"
+            cur.execute(
+                "SELECT COUNT(*) FROM mentions WHERE block_id = %s",
+                (raw_id,),
+            )
+            mention_count = cur.fetchone()[0]
+            mention_info = f"  Mentions: {mention_count}" if mention_count > 0 else ""
+            return f"Block ({lang}){mention_info}\n\n{text}\n\nEnter: edit  l: link  M: mentions"
         return f"Block: {raw_id}"
 
     return ""
@@ -182,6 +188,11 @@ def _entity_detail(cur, entity_id: str, work: dict | None) -> str:
     )
     mentions = cur.fetchall()
 
+    # Properties
+    cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+    prop_row = cur.fetchone()
+    properties = prop_row[0] if prop_row and prop_row[0] else {}
+
     detail_lines = [f"Entity: {entity_type} {name}", ""]
 
     if labels:
@@ -190,6 +201,12 @@ def _entity_detail(cur, entity_id: str, work: dict | None) -> str:
             detail_lines.append(f"  - {lang}: {base_form}")
             if aliases:
                 detail_lines.append(f"    aliases: {aliases}")
+        detail_lines.append("")
+
+    if properties:
+        detail_lines.append("Properties:")
+        for key, value in properties.items():
+            detail_lines.append(f"  {key}: {value}")
         detail_lines.append("")
 
     detail_lines.append("Note (work-scoped):")
@@ -260,6 +277,25 @@ def fetch_block_text(db, block_id: str) -> tuple[str, str]:
         if row is None:
             raise LookupError(f"Block {block_id} not found")
     return row[0], row[1]
+
+
+def fetch_block_mentions(db, block_id: str) -> list[tuple[str, str, str, str]]:
+    """Return list of (mention_id, entity_type, entity_label, language) for a block."""
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id, e.entity_type, e.canonical_label, m.language
+            FROM mentions m
+            JOIN entities e ON e.id = m.entity_id
+            WHERE m.block_id = %s
+            ORDER BY e.canonical_label
+            """,
+            (block_id,),
+        )
+        return [
+            (str(r[0]), r[1], r[2] or "(unnamed)", r[3])
+            for r in cur.fetchall()
+        ]
 
 
 def fetch_item_title(db, kind: str, item_id: str) -> str:

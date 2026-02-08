@@ -95,6 +95,110 @@ const handlers = {
       loadLevel();
     }
   },
+
+  async onAddItem() {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+
+    const level = currentLevel(state);
+
+    if (level === "documents") {
+      const title = window.prompt("Document title:");
+      if (!title) return;
+      try {
+        await api.createDocument(port, title);
+        await loadLevel();
+      } catch (err) {
+        store.dispatch({ type: "error", message: err.message });
+      }
+    } else if (level === "sections") {
+      const last = state.path[state.path.length - 1];
+      const title = window.prompt("Section title:");
+      if (!title) return;
+      try {
+        await api.createSection(port, last.id, title);
+        await loadLevel();
+      } catch (err) {
+        store.dispatch({ type: "error", message: err.message });
+      }
+    }
+  },
+
+  async onDeleteItem(item) {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+
+    const level = currentLevel(state);
+    const label = item.title || "(untitled)";
+    if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) return;
+
+    try {
+      if (level === "documents") {
+        await api.deleteDocument(port, item.id);
+      } else if (level === "sections") {
+        await api.deleteSection(port, item.id);
+      } else if (level === "blocks") {
+        await api.deleteBlock(port, item.id);
+      }
+      await loadLevel();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onAddEntity() {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+
+    const entityType = window.prompt("Entity type (e.g. concept):", "concept");
+    if (!entityType) return;
+    const label = window.prompt("Entity name:");
+    if (!label) return;
+
+    try {
+      await api.createEntity(port, entityType, label);
+      await loadEntities();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onDeleteEntity(entity) {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+
+    if (!window.confirm(`Delete entity "${entity.label}"? This cannot be undone.`)) return;
+
+    try {
+      await api.deleteEntity(port, entity.id);
+      store.dispatch({ type: "set-entity-detail", detail: null });
+      store.dispatch({ type: "select-entity", id: null });
+      await loadEntities();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onEditEntityNote(entityId) {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+
+    const current = state.entityDetail?.note || "";
+    const note = window.prompt("Entity note:", current);
+    if (note === null) return;
+
+    try {
+      await api.saveEntityNote(port, entityId, note);
+      await loadEntityDetail(entityId);
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,11 @@ from littera.db.workdb import open_work_db, WorkDb
 
 ROUTES = [
     (re.compile(r"^/api/documents$"), "GET", "_get_documents"),
+    (re.compile(r"^/api/documents$"), "POST", "_post_document"),
+    (re.compile(r"^/api/documents/([^/]+)$"), "DELETE", "_delete_document"),
     (re.compile(r"^/api/documents/([^/]+)/sections$"), "GET", "_get_sections"),
+    (re.compile(r"^/api/sections$"), "POST", "_post_section"),
+    (re.compile(r"^/api/sections/([^/]+)$"), "DELETE", "_delete_section"),
     (re.compile(r"^/api/sections/([^/]+)/blocks$"), "GET", "_get_blocks"),
     (re.compile(r"^/api/blocks/batch$"), "PUT", "_put_blocks_batch"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "GET", "_get_block"),
@@ -34,7 +38,10 @@ ROUTES = [
     (re.compile(r"^/api/blocks/([^/]+)$"), "DELETE", "_delete_block"),
     (re.compile(r"^/api/blocks$"), "POST", "_post_block"),
     (re.compile(r"^/api/entities$"), "GET", "_get_entities"),
+    (re.compile(r"^/api/entities$"), "POST", "_post_entity"),
     (re.compile(r"^/api/entities/([^/]+)$"), "GET", "_get_entity"),
+    (re.compile(r"^/api/entities/([^/]+)$"), "DELETE", "_delete_entity"),
+    (re.compile(r"^/api/entities/([^/]+)/note$"), "PUT", "_put_entity_note"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
     (re.compile(r"^/health$"), "GET", "_health"),
 ]
@@ -270,6 +277,97 @@ class SidecarHandler(BaseHTTPRequestHandler):
         conn = self.work_db.conn
         with conn.cursor() as cur:
             cur.execute("DELETE FROM blocks WHERE id = %s", (block_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _post_document(self):
+        body = self._read_json_body()
+        title = body.get("title", "Untitled")
+        work_id = self.work_db.cfg.get("work", {}).get("id")
+        if work_id is None:
+            return {"error": "no work_id in config"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO documents (work_id, title) VALUES (%s, %s) RETURNING id",
+                (work_id, title),
+            )
+            doc_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": doc_id}
+
+    def _delete_document(self, document_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM documents WHERE id = %s", (document_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _post_section(self):
+        body = self._read_json_body()
+        document_id = body.get("document_id")
+        title = body.get("title", "Untitled")
+        if not document_id:
+            return {"error": "document_id required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO sections (document_id, title, order_index) "
+                "VALUES (%s, %s, COALESCE((SELECT MAX(order_index)+1 FROM sections WHERE document_id = %s), 1)) "
+                "RETURNING id",
+                (document_id, title, document_id),
+            )
+            section_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": section_id}
+
+    def _delete_section(self, section_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM sections WHERE id = %s", (section_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _post_entity(self):
+        body = self._read_json_body()
+        entity_type = body.get("entity_type", "concept")
+        label = body.get("label", "")
+        if not label:
+            return {"error": "label required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO entities (entity_type, canonical_label) VALUES (%s, %s) RETURNING id",
+                (entity_type, label),
+            )
+            entity_id = str(cur.fetchone()[0])
+        conn.commit()
+        return {"ok": True, "id": entity_id}
+
+    def _delete_entity(self, entity_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM entities WHERE id = %s", (entity_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _put_entity_note(self, entity_id: str):
+        body = self._read_json_body()
+        note = body.get("note", "")
+        work_id = self.work_db.cfg.get("work", {}).get("id")
+        if work_id is None:
+            return {"error": "no work_id in config"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO entity_work_metadata (entity_id, work_id, metadata)
+                VALUES (%s, %s, %s::jsonb)
+                ON CONFLICT (entity_id, work_id)
+                DO UPDATE SET metadata = EXCLUDED.metadata
+                """,
+                (entity_id, work_id, json.dumps({"note": note})),
+            )
         conn.commit()
         return {"ok": True}
 

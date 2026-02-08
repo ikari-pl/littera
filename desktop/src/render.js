@@ -13,7 +13,7 @@ export function render(state, handlers) {
   renderBreadcrumb(state, handlers);
   renderTabs(state, handlers);
   renderSidebar(state, handlers);
-  renderContent(state);
+  renderContent(state, handlers);
   renderError(state);
 }
 
@@ -72,9 +72,36 @@ function renderTabs(state, handlers) {
 // Sidebar item list
 // ---------------------------------------------------------------------------
 
+function renderSidebarActions(state, handlers) {
+  const el = document.getElementById("sidebar-actions");
+  if (!el) return;
+  el.innerHTML = "";
+
+  if (state.view === "entities") {
+    const addBtn = document.createElement("button");
+    addBtn.className = "sidebar-action-btn";
+    addBtn.textContent = "+";
+    addBtn.title = "Add entity";
+    addBtn.addEventListener("click", () => handlers.onAddEntity());
+    el.appendChild(addBtn);
+  } else if (!state.editing) {
+    const level = currentLevel(state);
+    if (level === "documents" || level === "sections") {
+      const addBtn = document.createElement("button");
+      addBtn.className = "sidebar-action-btn";
+      addBtn.textContent = "+";
+      addBtn.title = level === "documents" ? "Add document" : "Add section";
+      addBtn.addEventListener("click", () => handlers.onAddItem());
+      el.appendChild(addBtn);
+    }
+  }
+}
+
 function renderSidebar(state, handlers) {
   const el = document.getElementById("sidebar-list");
   el.innerHTML = "";
+
+  renderSidebarActions(state, handlers);
 
   if (state.loading) {
     const li = document.createElement("li");
@@ -119,6 +146,29 @@ function renderSidebar(state, handlers) {
       }
     }
 
+    // Delete button
+    if (state.view === "entities") {
+      const delBtn = document.createElement("button");
+      delBtn.className = "sidebar-delete-btn";
+      delBtn.textContent = "\u00d7";
+      delBtn.title = "Delete";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handlers.onDeleteEntity(item);
+      });
+      li.appendChild(delBtn);
+    } else if (!state.editing) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "sidebar-delete-btn";
+      delBtn.textContent = "\u00d7";
+      delBtn.title = "Delete";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handlers.onDeleteItem(item);
+      });
+      li.appendChild(delBtn);
+    }
+
     li.addEventListener("click", () => handlers.onItemClick(item));
     el.appendChild(li);
   }
@@ -128,7 +178,7 @@ function renderSidebar(state, handlers) {
 // Content area
 // ---------------------------------------------------------------------------
 
-function renderContent(state) {
+function renderContent(state, handlers) {
   const el = document.getElementById("content");
 
   // When editing, ProseMirror owns the #content area — don't touch it
@@ -156,7 +206,8 @@ function renderContent(state) {
 
   // Entity detail view
   if (state.view === "entities" && state.entityDetail) {
-    renderEntityDetail(el, state.entityDetail);
+    const detailWithId = { ...state.entityDetail, _entityId: state.selectedEntityId };
+    renderEntityDetail(el, detailWithId, handlers);
     return;
   }
 
@@ -273,7 +324,7 @@ function escapeHtml(text) {
 // Entity detail
 // ---------------------------------------------------------------------------
 
-function renderEntityDetail(el, detail) {
+function renderEntityDetail(el, detail, handlers) {
   el.innerHTML = "";
 
   const header = document.createElement("div");
@@ -311,7 +362,22 @@ function renderEntityDetail(el, detail) {
   // Note
   const noteSection = document.createElement("div");
   noteSection.className = "entity-section";
-  noteSection.innerHTML = "<h3>Note</h3>";
+
+  const noteHeader = document.createElement("div");
+  noteHeader.className = "entity-section-header";
+  const noteH3 = document.createElement("h3");
+  noteH3.textContent = "Note";
+  noteHeader.appendChild(noteH3);
+
+  if (handlers && handlers.onEditEntityNote) {
+    const editBtn = document.createElement("button");
+    editBtn.className = "entity-action-btn";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => handlers.onEditEntityNote(detail._entityId));
+    noteHeader.appendChild(editBtn);
+  }
+  noteSection.appendChild(noteHeader);
+
   const noteText = document.createElement("p");
   noteText.className = detail.note ? "entity-note" : "entity-note entity-note-empty";
   noteText.textContent = detail.note || "(no note)";

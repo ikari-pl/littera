@@ -175,3 +175,81 @@ def save_block_text(db, block_id: str, text: str) -> None:
             (text, block_id),
         )
     db.commit()
+
+
+# =============================================================================
+# Entity labels
+# =============================================================================
+
+def add_entity_label(db, entity_id: str, language: str, base_form: str) -> None:
+    """Add or update a label for an entity (one per language)."""
+    label_id = str(uuid.uuid4())
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO entity_labels (id, entity_id, language, base_form)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (entity_id, language)
+            DO UPDATE SET base_form = EXCLUDED.base_form
+            """,
+            (label_id, entity_id, language, base_form),
+        )
+    db.commit()
+
+
+def delete_entity_label(db, entity_id: str, language: str) -> bool:
+    """Delete a label by entity and language. Returns True if deleted."""
+    with db.cursor() as cur:
+        cur.execute(
+            "DELETE FROM entity_labels WHERE entity_id = %s AND language = %s",
+            (entity_id, language),
+        )
+        deleted = cur.rowcount > 0
+    db.commit()
+    return deleted
+
+
+# =============================================================================
+# Entity properties
+# =============================================================================
+
+def set_entity_property(db, entity_id: str, key: str, value: str) -> None:
+    """Set a property on an entity (merged into existing properties JSONB)."""
+    with db.cursor() as cur:
+        cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+        row = cur.fetchone()
+        props = row[0] if row and row[0] else {}
+        props[key] = value
+        cur.execute(
+            "UPDATE entities SET properties = %s WHERE id = %s",
+            (json.dumps(props), entity_id),
+        )
+    db.commit()
+
+
+def delete_entity_property(db, entity_id: str, key: str) -> bool:
+    """Delete a property from an entity. Returns True if deleted."""
+    with db.cursor() as cur:
+        cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+        row = cur.fetchone()
+        props = row[0] if row and row[0] else {}
+        if key not in props:
+            return False
+        del props[key]
+        cur.execute(
+            "UPDATE entities SET properties = %s WHERE id = %s",
+            (json.dumps(props) if props else None, entity_id),
+        )
+    db.commit()
+    return True
+
+
+# =============================================================================
+# Mention deletion
+# =============================================================================
+
+def delete_mention(db, mention_id: str) -> None:
+    """Delete a mention by its id."""
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM mentions WHERE id = %s", (mention_id,))
+    db.commit()
