@@ -97,6 +97,14 @@ export function renameSection(port, id, title) {
   return put(port, `/api/sections/${id}`, { title });
 }
 
+export function reorderDocument(port, docId, position) {
+  return put(port, `/api/documents/${docId}/order`, { position });
+}
+
+export function reorderSection(port, sectionId, position) {
+  return put(port, `/api/sections/${sectionId}/order`, { position });
+}
+
 export function createDocument(port, title) {
   return post(port, "/api/documents", { title });
 }

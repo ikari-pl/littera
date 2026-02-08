@@ -1,4 +1,4 @@
-"""Section commands: littera section add|list|delete|rename"""
+"""Section commands: littera section add|list|delete|rename|move"""
 
 import sys
 import uuid
@@ -10,7 +10,7 @@ from littera.db.workdb import open_work_db
 
 def _resolve_document(cur, selector: str) -> tuple[str, str]:
     """Resolve document selector to (id, title)."""
-    cur.execute("SELECT id, title FROM documents ORDER BY created_at")
+    cur.execute("SELECT id, title FROM documents ORDER BY order_index NULLS LAST, created_at")
     rows = cur.fetchall()
 
     if selector.isdigit():
@@ -40,7 +40,7 @@ def _resolve_document(cur, selector: str) -> tuple[str, str]:
 def _resolve_section(cur, doc_id: str, selector: str) -> tuple[str, str]:
     """Resolve section selector to (id, title)."""
     cur.execute(
-        "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index",
+        "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index NULLS LAST, created_at",
         (doc_id,),
     )
     rows = cur.fetchall()
@@ -106,7 +106,7 @@ def register(app: typer.Typer):
                 cur = db.conn.cursor()
                 doc_id, doc_title = _resolve_document(cur, document)
                 cur.execute(
-                    "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index",
+                    "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index NULLS LAST, created_at",
                     (doc_id,),
                 )
                 rows = cur.fetchall()
@@ -121,6 +121,44 @@ def register(app: typer.Typer):
         print(f"Sections in '{doc_title}':")
         for idx, (sec_id, title) in enumerate(rows, 1):
             print(f"[{idx}] {title}")
+
+    @app.command()
+    def move(document: str, section: str, position: int):
+        """Move a section within its document to a new position (1-based)."""
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                doc_id, _ = _resolve_document(cur, document)
+                sec_id, sec_title = _resolve_section(cur, doc_id, section)
+
+                # Get all sections for this document in current order
+                cur.execute(
+                    "SELECT id FROM sections WHERE document_id = %s "
+                    "ORDER BY order_index NULLS LAST, created_at",
+                    (doc_id,),
+                )
+                ids = [str(r[0]) for r in cur.fetchall()]
+
+                if position < 1 or position > len(ids):
+                    print(f"Position must be between 1 and {len(ids)}")
+                    sys.exit(1)
+
+                # Remove target, insert at new position
+                ids.remove(str(sec_id))
+                ids.insert(position - 1, str(sec_id))
+
+                # Bulk update order_index
+                for idx, sid in enumerate(ids, 1):
+                    cur.execute(
+                        "UPDATE sections SET order_index = %s WHERE id = %s",
+                        (idx, sid),
+                    )
+                db.conn.commit()
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"✓ Section moved: {sec_title} → position {position}")
 
     @app.command()
     def delete(document: str, section: str):

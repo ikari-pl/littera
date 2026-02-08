@@ -1,4 +1,4 @@
-"""Document commands: littera doc add|list|delete|rename"""
+"""Document commands: littera doc add|list|delete|rename|move"""
 
 import sys
 import uuid
@@ -6,6 +6,41 @@ import uuid
 import typer
 
 from littera.db.workdb import open_work_db
+
+
+def _resolve_doc(cur, selector: str) -> tuple[str, str]:
+    """Resolve document selector (index, UUID, or title) to (id, title)."""
+    cur.execute(
+        "SELECT id, title FROM documents ORDER BY order_index NULLS LAST, created_at"
+    )
+    rows = cur.fetchall()
+
+    if not rows:
+        print("No documents found.")
+        sys.exit(1)
+
+    if selector.isdigit():
+        idx = int(selector)
+        if 1 <= idx <= len(rows):
+            return rows[idx - 1]
+        print(f"Invalid index: {selector}")
+        sys.exit(1)
+
+    # Try UUID match
+    for did, title in rows:
+        if str(did) == selector:
+            return did, title
+
+    # Try title match
+    matches = [(did, t) for did, t in rows if t == selector]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        print(f"Ambiguous title: {selector}")
+        sys.exit(1)
+
+    print(f"Document not found: {selector}")
+    sys.exit(1)
 
 
 def register(app: typer.Typer):
@@ -39,7 +74,10 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                cur.execute("SELECT id, title FROM documents ORDER BY created_at")
+                cur.execute(
+                    "SELECT id, title FROM documents "
+                    "ORDER BY order_index NULLS LAST, created_at"
+                )
                 rows = cur.fetchall()
         except RuntimeError as e:
             print(str(e))
@@ -54,47 +92,50 @@ def register(app: typer.Typer):
             print(f"[{idx}] {title} ({doc_id})")
 
     @app.command()
+    def move(selector: str, position: int):
+        """Move a document to a new position (1-based)."""
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                doc_id, doc_title = _resolve_doc(cur, selector)
+
+                # Get all documents in current order
+                cur.execute(
+                    "SELECT id FROM documents "
+                    "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
+                    "ORDER BY order_index NULLS LAST, created_at",
+                    (doc_id,),
+                )
+                ids = [str(r[0]) for r in cur.fetchall()]
+
+                if position < 1 or position > len(ids):
+                    print(f"Position must be between 1 and {len(ids)}")
+                    sys.exit(1)
+
+                # Remove target, insert at new position
+                ids.remove(str(doc_id))
+                ids.insert(position - 1, str(doc_id))
+
+                # Bulk update order_index
+                for idx, did in enumerate(ids, 1):
+                    cur.execute(
+                        "UPDATE documents SET order_index = %s WHERE id = %s",
+                        (idx, did),
+                    )
+                db.conn.commit()
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"✓ Document moved: {doc_title} → position {position}")
+
+    @app.command()
     def delete(selector: str):
         """Delete a document by index or UUID."""
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-
-                # Resolve selector to document ID
-                cur.execute("SELECT id, title FROM documents ORDER BY created_at")
-                rows = cur.fetchall()
-
-                if not rows:
-                    print("No documents to delete.")
-                    sys.exit(1)
-
-                doc_id = None
-                doc_title = None
-
-                if selector.isdigit():
-                    idx = int(selector)
-                    if 1 <= idx <= len(rows):
-                        doc_id, doc_title = rows[idx - 1]
-                    else:
-                        print(f"Invalid index: {selector}")
-                        sys.exit(1)
-                else:
-                    # Try matching by UUID
-                    for did, title in rows:
-                        if str(did) == selector:
-                            doc_id, doc_title = did, title
-                            break
-                    if doc_id is None:
-                        # Try matching by title
-                        matches = [(did, t) for did, t in rows if t == selector]
-                        if len(matches) == 1:
-                            doc_id, doc_title = matches[0]
-                        elif len(matches) > 1:
-                            print(f"Ambiguous title: {selector}")
-                            sys.exit(1)
-                        else:
-                            print(f"Document not found: {selector}")
-                            sys.exit(1)
+                doc_id, doc_title = _resolve_doc(cur, selector)
 
                 # Count dependents before cascade
                 cur.execute(
@@ -131,42 +172,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-
-                # Resolve selector to document ID
-                cur.execute("SELECT id, title FROM documents ORDER BY created_at")
-                rows = cur.fetchall()
-
-                if not rows:
-                    print("No documents to rename.")
-                    sys.exit(1)
-
-                doc_id = None
-                old_title = None
-
-                if selector.isdigit():
-                    idx = int(selector)
-                    if 1 <= idx <= len(rows):
-                        doc_id, old_title = rows[idx - 1]
-                    else:
-                        print(f"Invalid index: {selector}")
-                        sys.exit(1)
-                else:
-                    # Try matching by UUID
-                    for did, title in rows:
-                        if str(did) == selector:
-                            doc_id, old_title = did, title
-                            break
-                    if doc_id is None:
-                        # Try matching by title
-                        matches = [(did, t) for did, t in rows if t == selector]
-                        if len(matches) == 1:
-                            doc_id, old_title = matches[0]
-                        elif len(matches) > 1:
-                            print(f"Ambiguous title: {selector}")
-                            sys.exit(1)
-                        else:
-                            print(f"Document not found: {selector}")
-                            sys.exit(1)
+                doc_id, old_title = _resolve_doc(cur, selector)
 
                 cur.execute(
                     "UPDATE documents SET title = %s WHERE id = %s",

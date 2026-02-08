@@ -26,14 +26,14 @@ def refresh_outline(state: AppState) -> None:
     with state.db.cursor() as cur:
         if not state.path:
             # Documents level
-            cur.execute("SELECT id, title FROM documents ORDER BY created_at")
+            cur.execute("SELECT id, title FROM documents ORDER BY order_index NULLS LAST, created_at")
             for doc_id, title in cur.fetchall():
                 items.append(OutlineItem(id=str(doc_id), kind="document", title=title))
         else:
             last = state.path[-1]
             if last.kind == "document":
                 cur.execute(
-                    "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index",
+                    "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index NULLS LAST, created_at",
                     (last.id,),
                 )
                 for sec_id, title in cur.fetchall():
