@@ -407,33 +407,44 @@ This is a direct port, not a reinvention. The TUI proved the reducer model works
 - [x] Dirty block tracking via structural sharing
 - [x] Save dirty blocks via `PUT /api/blocks/batch`
 - [x] New block creation (Shift+Enter)
-- [ ] Block reordering (drag handle) — deferred
-- [ ] Create document / section via UI — deferred
+- [ ] Block reordering (drag handle) — deferred to 2E
+- [x] Create document / section / entity via UI (sidebar add/delete buttons)
 - [x] Undo/redo (ProseMirror's built-in history plugin)
 
 **Exit criteria:** Can write and edit content through the desktop app, with changes persisted to PG and visible in CLI/TUI.
 
-### Phase 2D: Mentions and Entities (1-2 sessions) — PARTIAL
+### Phase 2D: Mentions, Entities, and Desktop UX (2-3 sessions) — COMPLETE
 
-**Goal:** Semantic layer in the editor.
+**Goal:** Semantic layer in the editor, editing affordances, and work lifecycle.
 
 - [x] Mention node type with `{@label|entity:uuid}` Markdown syntax
 - [x] Mention pill NodeView (styled, non-editable atom)
-- [x] Entity linking flow (mention popup with entity search)
-- [ ] Entity creation from editor — deferred
-- [ ] Mention tooltips on hover — deferred
+- [x] Entity linking flow (`@` mention popup with entity search)
+- [x] Mention pill click navigates to entity detail
+- [x] Bubble toolbar on text selection (bold, italic, code, link, headings)
+- [x] Slash command menu (`/` at start of empty paragraph: headings, code block, blockquote, horizontal rule)
+- [x] Blockquote support in schema, serializer, and slash menu
+- [x] Structure CRUD from desktop UI (create/delete documents, sections, entities; edit entity notes)
+- [x] Work directory picker at startup (recent works, workspace scanning, browse/new work, config at `~/.littera/desktop.json`)
+- [x] Unsaved changes guard (beforeunload + navigation dirty check)
+- [x] Playwright test suite (54 tests covering navigation, editor, mentions, save, entities, picker)
+- [ ] Entity creation from editor (inline) — deferred to 2E
+- [ ] Mention tooltips on hover — deferred to 2E
 
-**Exit criteria:** Can link entities to blocks and see mentions as inline pills.
+**Exit criteria:** Full editing workflow including formatting, entity linking, structure management, and work selection.
 
 ### Phase 2E: Polish and Immersion (2-3 sessions) — NOT STARTED
 
 **Goal:** Make it feel like a real writing tool.
 
 - [ ] Full-screen distraction-free mode
-- [ ] Keyboard shortcut system
+- [ ] Keyboard shortcut system (beyond Cmd+S)
 - [ ] Light/dark theme
 - [ ] Smooth transitions and loading states
 - [ ] Error handling and recovery (including WAL corruption dialog, ported from TUI)
+- [ ] Block reordering (drag handle in left gutter)
+- [ ] Entity creation from editor (inline)
+- [ ] Mention tooltips on hover
 - [ ] Bundling and distribution (macOS .dmg at minimum)
 
 **Exit criteria:** The app is usable for daily writing. A writer can open it, navigate to a section, and write without encountering machinery.

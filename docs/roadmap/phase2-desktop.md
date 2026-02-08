@@ -33,4 +33,4 @@ These risks must be actively resisted.
 
 ## Execution Plan
 
-- [Phase 2 — Desktop App (Detailed Plan)](../plan/phase2-desktop.md) — 2A–2C complete, 2D partial, 2E not started
+- [Phase 2 — Desktop App (Detailed Plan)](../plan/phase2-desktop.md) — 2A–2D complete, 2E not started
