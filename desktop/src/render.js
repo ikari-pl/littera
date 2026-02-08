@@ -27,6 +27,10 @@ export function render(state, handlers) {
   renderSidebar(state, handlers);
   renderContent(state, handlers);
   renderError(state);
+
+  // Zen mode: toggle class on #app to hide sidebar/chrome via CSS
+  const app = document.getElementById("app");
+  app.classList.toggle("zen-mode", state.zenMode);
 }
 
 // ---------------------------------------------------------------------------

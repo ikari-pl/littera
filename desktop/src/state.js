@@ -27,6 +27,7 @@ export const initialState = {
   editorSectionId: null,   // section currently being edited
   savedDoc: null,          // ProseMirror doc at last save (for dirty tracking)
   dirty: false,            // unsaved changes exist
+  zenMode: false,          // distraction-free mode (hides sidebar/chrome)
 };
 
 export function reduce(state, action) {
@@ -63,6 +64,7 @@ export function reduce(state, action) {
         editorSectionId: null,
         savedDoc: null,
         dirty: false,
+        zenMode: false,
       };
 
     case "pop": {
@@ -77,6 +79,7 @@ export function reduce(state, action) {
         editorSectionId: null,
         savedDoc: null,
         dirty: false,
+        zenMode: false,
       };
     }
 
@@ -93,6 +96,7 @@ export function reduce(state, action) {
         editorSectionId: null,
         savedDoc: null,
         dirty: false,
+        zenMode: false,
       };
     }
 
@@ -136,6 +140,7 @@ export function reduce(state, action) {
         editorSectionId: null,
         savedDoc: null,
         dirty: false,
+        zenMode: false,
       };
 
     case "editor-mark-dirty":
@@ -143,6 +148,9 @@ export function reduce(state, action) {
 
     case "editor-mark-saved":
       return { ...state, savedDoc: action.doc, dirty: false };
+
+    case "toggle-zen":
+      return { ...state, zenMode: !state.zenMode };
 
     default:
       return state;
