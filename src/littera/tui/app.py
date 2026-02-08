@@ -327,6 +327,10 @@ class LitteraApp(App):
             self._prompt_add_review()
             return
 
+        if self.state.view == "alignments":
+            self._prompt_add_alignment()
+            return
+
         if self.state.view != "outline":
             return
 
@@ -514,7 +518,7 @@ class LitteraApp(App):
 
     @safe_action
     def action_delete_item(self) -> None:
-        """Delete selected document/section/block, alignment, or review."""
+        """Delete selected document/section/block, entity, alignment, or review."""
         if self.state is None:
             return
         if self.state.view == "alignments":
@@ -522,6 +526,9 @@ class LitteraApp(App):
             return
         if self.state.view == "reviews":
             self._delete_review()
+            return
+        if self.state.view == "entities":
+            self._delete_entity()
             return
 
         if self.state.view != "outline":
@@ -573,6 +580,29 @@ class LitteraApp(App):
 
         self.push_screen(
             InputDialog("Link to Entity", "Entity Name:", ""), on_name_result
+        )
+
+    @safe_action
+    def _delete_entity(self) -> None:
+        """Delete the selected entity with confirmation."""
+        if self.state is None or self.state.view != "entities":
+            return
+        sel = self.state.entities.selection
+        if sel.kind != "entity" or not sel.id:
+            return
+
+        entity_id = sel.id
+
+        async def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            actions.delete_entity(self.state.db, entity_id)
+            self.state.dispatch(EntitiesClearSelection())
+            self._render_view()
+
+        self.push_screen(
+            ConfirmDialog("Delete Entity?", "This will also delete all mentions and labels for this entity."),
+            on_confirm,
         )
 
     # =====================
@@ -691,6 +721,49 @@ class LitteraApp(App):
     # =====================
     # Alignment management
     # =====================
+
+    @safe_action
+    def _prompt_add_alignment(self) -> None:
+        """Chain dialogs to create an alignment: source block, target block, type."""
+
+        async def on_src_result(src_id: str | None) -> None:
+            if not src_id:
+                return
+
+            async def on_tgt_result(tgt_id: str | None) -> None:
+                if not tgt_id:
+                    return
+
+                async def on_type_result(atype: str | None) -> None:
+                    if not atype:
+                        atype = "translation"
+                    self._create_alignment(src_id, tgt_id, atype)
+
+                self.push_screen(
+                    InputDialog("New Alignment", "Type (translation/adaptation/summary):", "translation"),
+                    on_type_result,
+                )
+
+            self.push_screen(
+                InputDialog("New Alignment", "Target block ID:", ""),
+                on_tgt_result,
+            )
+
+        self.push_screen(
+            InputDialog("New Alignment", "Source block ID:", ""),
+            on_src_result,
+        )
+
+    @safe_action
+    def _create_alignment(self, src_id: str, tgt_id: str, atype: str) -> None:
+        if self.state is None:
+            return
+        result = actions.create_alignment(self.state.db, src_id, tgt_id, atype)
+        if result is None:
+            self.notify("Alignment already exists between these blocks", severity="warning")
+            return
+        self.state.dispatch(AlignmentsSelect(result))
+        self._render_view()
 
     @safe_action
     def action_delete_alignment(self) -> None:

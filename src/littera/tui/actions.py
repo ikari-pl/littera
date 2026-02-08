@@ -102,6 +102,13 @@ def delete_item(db, kind: str, item_id: str) -> None:
     db.commit()
 
 
+def delete_entity(db, entity_id: str) -> None:
+    """Delete an entity by id. Cascades to mentions and labels via FK."""
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM entities WHERE id = %s", (entity_id,))
+    db.commit()
+
+
 # =============================================================================
 # Updates
 # =============================================================================
@@ -278,6 +285,28 @@ def delete_mention(db, mention_id: str) -> None:
 # =============================================================================
 # Alignment deletion
 # =============================================================================
+
+def create_alignment(db, source_block_id: str, target_block_id: str,
+                     alignment_type: str = "translation") -> str | None:
+    """Create a block alignment. Returns alignment id, or None if duplicate."""
+    alignment_id = str(uuid.uuid4())
+    with db.cursor() as cur:
+        cur.execute(
+            """SELECT 1 FROM block_alignments
+               WHERE (source_block_id = %s AND target_block_id = %s)
+                  OR (source_block_id = %s AND target_block_id = %s)""",
+            (source_block_id, target_block_id, target_block_id, source_block_id),
+        )
+        if cur.fetchone():
+            return None
+        cur.execute(
+            "INSERT INTO block_alignments (id, source_block_id, target_block_id, alignment_type) "
+            "VALUES (%s, %s, %s, %s)",
+            (alignment_id, source_block_id, target_block_id, alignment_type),
+        )
+    db.commit()
+    return alignment_id
+
 
 def delete_alignment(db, alignment_id: str) -> None:
     """Delete a block alignment by its id."""
