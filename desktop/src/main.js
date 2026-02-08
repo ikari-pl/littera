@@ -292,6 +292,37 @@ const handlers = {
     }
   },
 
+  onStartAddLabel() {
+    store.dispatch({ type: "start-add-label" });
+  },
+
+  onCancelAddLabel() {
+    store.dispatch({ type: "stop-add-label" });
+  },
+
+  async onAddLabel(entityId, language, baseForm) {
+    store.dispatch({ type: "stop-add-label" });
+    if (!baseForm) return;
+    const port = store.getState().sidecarPort;
+    try {
+      await api.addEntityLabel(port, entityId, language, baseForm, null);
+      await loadEntityDetail(entityId);
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onDeleteLabel(labelId) {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    try {
+      await api.deleteLabel(port, labelId);
+      await loadEntityDetail(state.selectedEntityId);
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onEditEntityNote(entityId) {
     const state = store.getState();
     const port = state.sidecarPort;

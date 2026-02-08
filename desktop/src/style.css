@@ -399,8 +399,78 @@ body {
 }
 
 .entity-label-row {
+  display: flex;
+  align-items: center;
   padding: 0.3rem 0;
   font-size: 0.9rem;
+}
+
+.entity-label-delete-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 0 0.3rem;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.entity-label-row:hover .entity-label-delete-btn {
+  opacity: 1;
+}
+
+.entity-label-delete-btn:hover {
+  color: var(--error);
+}
+
+.entity-label-add-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+}
+
+.entity-label-add-input {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  flex: 1;
+  outline: none;
+  font-family: inherit;
+}
+
+.entity-label-add-input:focus {
+  border-color: var(--accent);
+}
+
+.entity-label-add-input::placeholder {
+  color: var(--muted);
+}
+
+.entity-label-lang-select {
+  background: var(--badge-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--badge-fg);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.entity-label-lang-select:focus {
+  border-color: var(--accent);
 }
 
 .entity-aliases {
