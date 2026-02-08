@@ -618,15 +618,32 @@ function renderEntityDetail(el, detail, handlers) {
   if (detail.mentions && detail.mentions.length > 0) {
     const section = document.createElement("div");
     section.className = "entity-section";
-    section.innerHTML = "<h3>Mentions</h3>";
+
+    const mentionH3 = document.createElement("h3");
+    mentionH3.textContent = `Mentions (${detail.mentions.length})`;
+    section.appendChild(mentionH3);
 
     for (const m of detail.mentions) {
       const row = document.createElement("div");
       row.className = "mention-row";
-      row.innerHTML =
+
+      const info = document.createElement("div");
+      info.className = "mention-info";
+      info.innerHTML =
         `<span class="mention-path">${escapeHtml(m.document)} / ${escapeHtml(m.section)}</span>` +
         ` <span class="lang-badge">${escapeHtml(m.language)}</span>` +
         `<div class="mention-preview">${escapeHtml(m.preview)}</div>`;
+      row.appendChild(info);
+
+      if (handlers && handlers.onDeleteMention) {
+        const delBtn = document.createElement("button");
+        delBtn.className = "mention-delete-btn";
+        delBtn.textContent = "\u00d7";
+        delBtn.title = "Delete mention";
+        delBtn.addEventListener("click", () => handlers.onDeleteMention(m));
+        row.appendChild(delBtn);
+      }
+
       section.appendChild(row);
     }
     el.appendChild(section);

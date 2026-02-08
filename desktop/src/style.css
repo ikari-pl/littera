@@ -423,12 +423,21 @@ body {
    ========================================================================== */
 
 .mention-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
 }
 
 .mention-row:last-child {
   border-bottom: none;
+}
+
+.mention-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .mention-path {
@@ -443,6 +452,27 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mention-delete-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 0 0.3rem;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.mention-row:hover .mention-delete-btn {
+  opacity: 1;
+}
+
+.mention-delete-btn:hover {
+  color: var(--error);
 }
 
 /* ==========================================================================

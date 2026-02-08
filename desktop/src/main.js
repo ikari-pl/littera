@@ -277,6 +277,21 @@ const handlers = {
     }
   },
 
+  async onDeleteMention(mention) {
+    const state = store.getState();
+    const port = state.sidecarPort;
+    if (!port) return;
+
+    if (!window.confirm("Delete this mention? The text in the block will remain but the entity link will be removed.")) return;
+
+    try {
+      await api.deleteMention(port, mention.id);
+      await loadEntityDetail(state.selectedEntityId);
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onEditEntityNote(entityId) {
     const state = store.getState();
     const port = state.sidecarPort;

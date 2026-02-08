@@ -44,6 +44,7 @@ ROUTES = [
     (re.compile(r"^/api/entities/([^/]+)$"), "GET", "_get_entity"),
     (re.compile(r"^/api/entities/([^/]+)$"), "DELETE", "_delete_entity"),
     (re.compile(r"^/api/entities/([^/]+)/note$"), "PUT", "_put_entity_note"),
+    (re.compile(r"^/api/mentions/([^/]+)$"), "DELETE", "_delete_mention"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
     (re.compile(r"^/health$"), "GET", "_health"),
 ]
@@ -182,23 +183,24 @@ class SidecarHandler(BaseHTTPRequestHandler):
             # Mentions
             cur.execute(
                 """
-                SELECT d.title, s.title, b.language, b.source_text
+                SELECT m.id, m.block_id, d.title, s.title, b.language, b.source_text
                 FROM mentions m
                 JOIN blocks b ON b.id = m.block_id
                 JOIN sections s ON s.id = b.section_id
                 JOIN documents d ON d.id = s.document_id
                 WHERE m.entity_id = %s
                 ORDER BY b.created_at DESC
-                LIMIT 10
                 """,
                 (entity_id,),
             )
             mentions = [
                 {
-                    "document": r[0],
-                    "section": r[1],
-                    "language": r[2],
-                    "preview": r[3].replace("\n", " ")[:80],
+                    "id": str(r[0]),
+                    "block_id": str(r[1]),
+                    "document": r[2],
+                    "section": r[3],
+                    "language": r[4],
+                    "preview": r[5].replace("\n", " ")[:80],
                 }
                 for r in cur.fetchall()
             ]
@@ -378,6 +380,13 @@ class SidecarHandler(BaseHTTPRequestHandler):
         conn = self.work_db.conn
         with conn.cursor() as cur:
             cur.execute("DELETE FROM entities WHERE id = %s", (entity_id,))
+        conn.commit()
+        return {"ok": True}
+
+    def _delete_mention(self, mention_id: str):
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM mentions WHERE id = %s", (mention_id,))
         conn.commit()
         return {"ok": True}
 
