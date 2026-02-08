@@ -1,4 +1,4 @@
-"""Section commands: littera section add|list|delete"""
+"""Section commands: littera section add|list|delete|rename"""
 
 import sys
 import uuid
@@ -147,3 +147,24 @@ def register(app: typer.Typer):
 
         suffix = f" (cascaded: {blk_count} block(s))" if blk_count else ""
         print(f"✓ Section deleted: {sec_title}{suffix}")
+
+    @app.command()
+    def rename(document: str, section: str, new_title: str):
+        """Rename a section in a document."""
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                doc_id, _ = _resolve_document(cur, document)
+                sec_id, old_title = _resolve_section(cur, doc_id, section)
+
+                cur.execute(
+                    "UPDATE sections SET title = %s WHERE id = %s",
+                    (new_title, sec_id),
+                )
+                db.conn.commit()
+
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"✓ Section renamed: {old_title} → {new_title}")

@@ -125,6 +125,13 @@ def update_title(db, kind: str, item_id: str, title: str) -> None:
     db.commit()
 
 
+def set_block_language(db, block_id: str, language: str) -> None:
+    """Update a block's language."""
+    with db.cursor() as cur:
+        cur.execute("UPDATE blocks SET language = %s WHERE id = %s", (language, block_id))
+    db.commit()
+
+
 # =============================================================================
 # Entity linking
 # =============================================================================

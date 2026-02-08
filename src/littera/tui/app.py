@@ -89,6 +89,7 @@ class LitteraApp(App):
         ("g", "show_gaps", "Show Gaps"),
         ("R", "reviews", "Reviews"),
         ("S", "set_surface", "Set Surface"),
+        ("ctrl+l", "set_language", "Set Language"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -514,6 +515,30 @@ class LitteraApp(App):
         self.push_screen(
             InputDialog(f"Edit {kind_label}", "New title:", current_title),
             on_title_result,
+        )
+
+    @safe_action
+    def action_set_language(self) -> None:
+        """Set the language of the selected block."""
+        if self.state is None or self.state.view != "outline":
+            return
+
+        sel = self.state.entity_selection
+        if sel.kind != "block" or not sel.id:
+            return
+
+        block_id = sel.id
+        current_lang = queries.fetch_block_text(self.state.db, block_id)[0]
+
+        async def on_lang_result(language: str | None) -> None:
+            if not language:
+                return
+            actions.set_block_language(self.state.db, block_id, language)
+            self._render_view()
+
+        self.push_screen(
+            InputDialog("Set Language", "Language:", current_lang),
+            on_lang_result,
         )
 
     @safe_action

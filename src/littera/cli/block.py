@@ -1,10 +1,10 @@
-"""Block commands: littera block add|list|edit|delete
+"""Block commands: littera block add|list|edit|delete|set-language
 
 Section resolution: section selectors are scoped to a document when a
 document context is available.  For `add` and `list`, the caller provides
-an explicit section selector.  For `edit` and `delete`, blocks are resolved
-globally (UUIDs are unique) but index-based resolution uses the section
-that owns the block.
+an explicit section selector.  For `edit`, `delete`, and `set-language`,
+blocks are resolved globally (UUIDs are unique) but index-based resolution
+uses the section that owns the block.
 """
 
 import os
@@ -232,3 +232,23 @@ def register(app: typer.Typer):
         preview = text.replace("\n", " ")[:40]
         suffix = f" (cascaded: {mention_count} mention(s))" if mention_count else ""
         print(f"✓ Block deleted: ({lang}) {preview}...{suffix}")
+
+    @app.command("set-language")
+    def set_language(block: str, language: str):
+        """Change a block's language."""
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                block_id, old_lang, text = _resolve_block_global(cur, block)
+
+                cur.execute(
+                    "UPDATE blocks SET language = %s WHERE id = %s",
+                    (language, block_id),
+                )
+                db.conn.commit()
+
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"✓ Block language changed: {old_lang} → {language}")
