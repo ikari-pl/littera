@@ -28,7 +28,7 @@ export function render(state, handlers) {
   renderTabs(state, handlers);
   renderSidebar(state, handlers);
   renderContent(state, handlers);
-  renderError(state);
+  renderError(state, handlers);
   renderCommandPalette(state, handlers);
   renderThemeToggle(state, handlers);
 
@@ -65,7 +65,19 @@ function renderPicker(state, handlers) {
   if (state.pickerError) {
     const err = document.createElement("div");
     err.className = "picker-error";
-    err.textContent = state.pickerError;
+
+    const errText = document.createElement("span");
+    errText.textContent = state.pickerError;
+    err.appendChild(errText);
+
+    if (handlers && handlers.onRetryPicker) {
+      const retryBtn = document.createElement("button");
+      retryBtn.className = "picker-error-retry";
+      retryBtn.textContent = "Try Again";
+      retryBtn.addEventListener("click", () => handlers.onRetryPicker());
+      err.appendChild(retryBtn);
+    }
+
     picker.appendChild(err);
   }
 
@@ -1087,7 +1099,7 @@ function renderCommandPalette(state, handlers) {
 // Error banner
 // ---------------------------------------------------------------------------
 
-function renderError(state) {
+function renderError(state, handlers) {
   let el = document.getElementById("error-banner");
   if (state.error) {
     if (!el) {
@@ -1095,8 +1107,26 @@ function renderError(state) {
       el.id = "error-banner";
       document.body.prepend(el);
     }
-    el.textContent = state.error;
-    el.style.display = "block";
+    el.innerHTML = '';
+
+    const text = document.createElement("span");
+    text.className = "error-banner-text";
+    text.textContent = state.error;
+    el.appendChild(text);
+
+    const dismiss = document.createElement("button");
+    dismiss.className = "error-banner-dismiss";
+    dismiss.textContent = "\u00d7";
+    dismiss.title = "Dismiss";
+    dismiss.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (handlers && handlers.onDismissError) {
+        handlers.onDismissError();
+      }
+    });
+    el.appendChild(dismiss);
+
+    el.style.display = "flex";
   } else if (el) {
     el.style.display = "none";
   }
