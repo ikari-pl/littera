@@ -253,3 +253,14 @@ def delete_mention(db, mention_id: str) -> None:
     with db.cursor() as cur:
         cur.execute("DELETE FROM mentions WHERE id = %s", (mention_id,))
     db.commit()
+
+
+# =============================================================================
+# Alignment deletion
+# =============================================================================
+
+def delete_alignment(db, alignment_id: str) -> None:
+    """Delete a block alignment by its id."""
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM block_alignments WHERE id = %s", (alignment_id,))
+    db.commit()
