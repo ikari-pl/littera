@@ -30,6 +30,7 @@ export const initialState = {
   savedDoc: null,          // ProseMirror doc at last save (for dirty tracking)
   dirty: false,            // unsaved changes exist
   zenMode: false,          // distraction-free mode (hides sidebar/chrome)
+  theme: null,             // null = system, "light", "dark"
 };
 
 export function reduce(state, action) {
@@ -162,6 +163,9 @@ export function reduce(state, action) {
 
     case "toggle-zen":
       return { ...state, zenMode: !state.zenMode };
+
+    case "set-theme":
+      return { ...state, theme: action.theme };
 
     default:
       return state;

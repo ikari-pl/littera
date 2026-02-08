@@ -22,6 +22,40 @@ const { invoke } = window.__TAURI__.core;
 const store = createStore(reduce, initialState);
 
 // ---------------------------------------------------------------------------
+// Theme management
+// ---------------------------------------------------------------------------
+
+function applyTheme(theme) {
+  if (theme === null) {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", prefersDark ? "dark" : "light");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+}
+
+function saveThemePreference(theme) {
+  if (theme === null) {
+    localStorage.removeItem("littera-theme");
+  } else {
+    localStorage.setItem("littera-theme", theme);
+  }
+}
+
+// Initialize theme from localStorage
+const savedTheme = localStorage.getItem("littera-theme");
+if (savedTheme) {
+  store.dispatch({ type: "set-theme", theme: savedTheme });
+}
+applyTheme(savedTheme);
+
+// Follow system preference changes when theme is set to "system" (null)
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  const state = store.getState();
+  if (state.theme === null) applyTheme(null);
+});
+
+// ---------------------------------------------------------------------------
 // Preview text helper — strips markdown mention syntax for sidebar display
 // ---------------------------------------------------------------------------
 
@@ -111,6 +145,18 @@ const pickerHandlers = {
 const handlers = {
   // Picker handlers (merged in)
   ...pickerHandlers,
+
+  onThemeToggle() {
+    const state = store.getState();
+    // Cycle: system (null) → light → dark → system (null)
+    let next;
+    if (state.theme === null) next = "light";
+    else if (state.theme === "light") next = "dark";
+    else next = null;
+    store.dispatch({ type: "set-theme", theme: next });
+    applyTheme(next);
+    saveThemePreference(next);
+  },
 
   onItemClick(item) {
     const state = store.getState();

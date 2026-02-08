@@ -27,6 +27,7 @@ export function render(state, handlers) {
   renderSidebar(state, handlers);
   renderContent(state, handlers);
   renderError(state);
+  renderThemeToggle(state, handlers);
 
   // Zen mode: toggle class on #app to hide sidebar/chrome via CSS
   const app = document.getElementById("app");
@@ -201,6 +202,7 @@ function ensureAppLayout() {
     <aside id="sidebar">
       <div id="sidebar-header">
         <h1>Littera</h1>
+        <button id="theme-toggle">auto</button>
       </div>
       <nav id="breadcrumb"></nav>
       <div id="sidebar-actions"></div>
@@ -671,4 +673,20 @@ function renderError(state) {
   } else if (el) {
     el.style.display = "none";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Theme toggle
+// ---------------------------------------------------------------------------
+
+function themeLabel(theme) {
+  if (theme === null) return "auto";
+  return theme;
+}
+
+function renderThemeToggle(state, handlers) {
+  const btn = document.getElementById("theme-toggle");
+  if (!btn) return;
+  btn.textContent = themeLabel(state.theme);
+  btn.onclick = () => handlers.onThemeToggle();
 }
