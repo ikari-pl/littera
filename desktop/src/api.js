@@ -109,6 +109,10 @@ export function deleteEntity(port, id) {
   return del(port, `/api/entities/${id}`);
 }
 
+export function deleteMention(port, mentionId) {
+  return del(port, `/api/mentions/${mentionId}`);
+}
+
 export function saveEntityNote(port, entityId, note) {
   return put(port, `/api/entities/${entityId}/note`, { note });
 }
