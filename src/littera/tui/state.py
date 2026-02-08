@@ -20,7 +20,7 @@ from typing import Optional, Literal, Any, Union
 # =============================================================================
 
 ModeName = Literal["browse", "edit", "command"]
-ViewName = Literal["outline", "entities", "editor"]
+ViewName = Literal["outline", "entities", "editor", "reviews"]
 EditKind = Literal["entity_note", "block_text"]
 
 
@@ -76,6 +76,16 @@ class EntityItem:
     label: str
 
 
+@dataclass(frozen=True)
+class ReviewItem:
+    """A single review in the reviews list."""
+    id: str
+    severity: str       # "low", "medium", "high"
+    scope: str          # "work", "document", "section", "block", "entity", "alignment" or ""
+    issue_type: str     # or ""
+    description: str    # truncated preview
+
+
 # =============================================================================
 # View States
 # =============================================================================
@@ -94,6 +104,14 @@ class EntitiesState:
     """State for entities view."""
     selection: Selection = field(default_factory=Selection)
     items: list[EntityItem] = field(default_factory=list)
+    detail: str = ""
+
+
+@dataclass
+class ReviewsState:
+    """State for reviews view."""
+    items: list[ReviewItem] = field(default_factory=list)
+    selection: Selection = field(default_factory=Selection)
     detail: str = ""
 
 
@@ -164,6 +182,24 @@ class EntitiesClearSelection:
 
 
 @dataclass(frozen=True)
+class GotoReviews:
+    """Switch to reviews view."""
+    pass
+
+
+@dataclass(frozen=True)
+class ReviewsSelect:
+    """Select a review."""
+    review_id: str
+
+
+@dataclass(frozen=True)
+class ReviewsClearSelection:
+    """Clear review selection."""
+    pass
+
+
+@dataclass(frozen=True)
 class StartEdit:
     """Start editing (opens editor overlay)."""
     target: EditTarget
@@ -181,6 +217,7 @@ class ExitEditor:
 Action = Union[
     GotoOutline,
     GotoEntities,
+    GotoReviews,
     ClearSelection,
     OutlineSelect,
     OutlineClearSelection,
@@ -188,6 +225,8 @@ Action = Union[
     OutlinePop,
     EntitiesSelect,
     EntitiesClearSelection,
+    ReviewsSelect,
+    ReviewsClearSelection,
     StartEdit,
     ExitEditor,
 ]
@@ -213,11 +252,17 @@ def reduce(state: "AppState", action: Action) -> None:
             state.view = "entities"
             state.active_base = "entities"
 
+        case GotoReviews():
+            state.view = "reviews"
+            state.active_base = "reviews"
+
         case ClearSelection():
             if state.view == "outline":
                 state.outline.selection = Selection()
             elif state.view == "entities":
                 state.entities.selection = Selection()
+            elif state.view == "reviews":
+                state.reviews.selection = Selection()
 
         case OutlineSelect(kind=kind, item_id=item_id):
             state.outline.selection = Selection(kind=kind, id=item_id)
@@ -239,6 +284,12 @@ def reduce(state: "AppState", action: Action) -> None:
 
         case EntitiesClearSelection():
             state.entities.selection = Selection()
+
+        case ReviewsSelect(review_id=review_id):
+            state.reviews.selection = Selection(kind="review", id=review_id)
+
+        case ReviewsClearSelection():
+            state.reviews.selection = Selection()
 
         case StartEdit(target=target, text=text, return_to=return_to):
             session = EditSession(
@@ -283,6 +334,7 @@ class AppState:
     # View-specific state
     outline: OutlineState = field(default_factory=OutlineState)
     entities: EntitiesState = field(default_factory=EntitiesState)
+    reviews: ReviewsState = field(default_factory=ReviewsState)
     editor: Optional[EditorOverlay] = None
 
     # Undo/redo state (scoped to edit sessions)

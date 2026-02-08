@@ -8,7 +8,7 @@ Usage in app.py:
     queries.refresh_entities(state)  # before EntitiesView.render()
 """
 
-from littera.tui.state import AppState, OutlineItem, EntityItem
+from littera.tui.state import AppState, OutlineItem, EntityItem, ReviewItem
 
 
 # =============================================================================
@@ -232,6 +232,81 @@ def _entity_detail(cur, entity_id: str, work: dict | None) -> str:
         detail_lines.append("  (none)")
 
     return "\n".join(detail_lines)
+
+
+# =============================================================================
+# Reviews
+# =============================================================================
+
+def refresh_reviews(state: AppState) -> None:
+    """Populate state.reviews.items and detail from DB."""
+    items: list[ReviewItem] = []
+    work_id = state.work.get("work", {}).get("id") if state.work else None
+
+    with state.db.cursor() as cur:
+        cur.execute("""
+            SELECT id, scope, scope_id, issue_type, description, severity
+            FROM reviews
+            WHERE work_id = %s
+            ORDER BY created_at
+        """, (work_id,))
+        for rid, scope, scope_id, issue_type, desc, severity in cur.fetchall():
+            preview = (desc or "").replace("\n", " ")[:60]
+            items.append(ReviewItem(
+                id=str(rid),
+                severity=severity or "medium",
+                scope=scope or "",
+                issue_type=issue_type or "",
+                description=preview,
+            ))
+
+        # Detail for selected review
+        sel = state.reviews.selection
+        detail = "Select a review"
+        if sel and sel.kind == "review" and sel.id:
+            detail = _review_detail(cur, sel.id)
+
+    state.reviews.items = items
+    state.reviews.detail = detail
+
+
+def _review_detail(cur, review_id: str) -> str:
+    """Build detail string for a selected review."""
+    cur.execute(
+        """
+        SELECT id, scope, scope_id, issue_type, description, severity,
+               metadata, created_at
+        FROM reviews
+        WHERE id = %s
+        """,
+        (review_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return f"Review {review_id} not found"
+
+    rid, scope, scope_id, issue_type, description, severity, metadata, created_at = row
+
+    lines = [f"Review: {rid}", ""]
+    lines.append(f"Severity: {severity}")
+    if scope:
+        lines.append(f"Scope: {scope}")
+    if scope_id:
+        lines.append(f"Scope ID: {scope_id}")
+    if issue_type:
+        lines.append(f"Issue type: {issue_type}")
+    lines.append(f"Created: {created_at}")
+    lines.append("")
+    lines.append("Description:")
+    lines.append(description or "(empty)")
+
+    if metadata:
+        lines.append("")
+        lines.append("Metadata:")
+        for key, value in metadata.items():
+            lines.append(f"  {key}: {value}")
+
+    return "\n".join(lines)
 
 
 # =============================================================================
