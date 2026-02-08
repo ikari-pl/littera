@@ -33,6 +33,7 @@ export const initialState = {
   // Entity label add mode
   addingLabel: false,
   commandPaletteOpen: false, // Cmd+K command palette
+  theme: null,             // null = system, "light", "dark"
 };
 
 export function reduce(state, action) {
@@ -178,6 +179,9 @@ export function reduce(state, action) {
 
     case "close-command-palette":
       return { ...state, commandPaletteOpen: false };
+
+    case "set-theme":
+      return { ...state, theme: action.theme };
 
     default:
       return state;
