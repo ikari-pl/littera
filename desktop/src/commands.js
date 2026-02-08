@@ -29,6 +29,13 @@ export const commands = [
     shortcut: null,
     action: (ctx) => ctx.handlers.onTabClick("outline"),
   },
+  {
+    id: "nav-switch-work",
+    label: "Switch Work",
+    category: "Navigation",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onSwitchWork(),
+  },
 
   // Editor
   {

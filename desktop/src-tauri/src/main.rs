@@ -321,6 +321,14 @@ fn open_work(path: String, state: tauri::State<SidecarState>) -> Result<u16, Str
     Ok(port)
 }
 
+/// Close the current work, stopping the sidecar.
+#[tauri::command]
+fn close_work(state: tauri::State<SidecarState>) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    *guard = None; // Drop triggers sidecar shutdown
+    Ok(())
+}
+
 /// Initialize a new Littera work at the given path.
 #[tauri::command]
 fn init_work(path: String) -> Result<(), String> {
@@ -366,6 +374,7 @@ pub fn run() {
             pick_folder,
             set_workspace,
             open_work,
+            close_work,
             init_work,
         ])
         .run(tauri::generate_context!())
