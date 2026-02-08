@@ -1,4 +1,4 @@
-"""Document commands: littera doc add|list|delete"""
+"""Document commands: littera doc add|list|delete|rename"""
 
 import sys
 import uuid
@@ -124,3 +124,58 @@ def register(app: typer.Typer):
             cascade.append(f"{blk_count} block(s)")
         suffix = f" (cascaded: {', '.join(cascade)})" if cascade else ""
         print(f"✓ Document deleted: {doc_title}{suffix}")
+
+    @app.command()
+    def rename(selector: str, new_title: str):
+        """Rename a document by index, UUID, or title."""
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+
+                # Resolve selector to document ID
+                cur.execute("SELECT id, title FROM documents ORDER BY created_at")
+                rows = cur.fetchall()
+
+                if not rows:
+                    print("No documents to rename.")
+                    sys.exit(1)
+
+                doc_id = None
+                old_title = None
+
+                if selector.isdigit():
+                    idx = int(selector)
+                    if 1 <= idx <= len(rows):
+                        doc_id, old_title = rows[idx - 1]
+                    else:
+                        print(f"Invalid index: {selector}")
+                        sys.exit(1)
+                else:
+                    # Try matching by UUID
+                    for did, title in rows:
+                        if str(did) == selector:
+                            doc_id, old_title = did, title
+                            break
+                    if doc_id is None:
+                        # Try matching by title
+                        matches = [(did, t) for did, t in rows if t == selector]
+                        if len(matches) == 1:
+                            doc_id, old_title = matches[0]
+                        elif len(matches) > 1:
+                            print(f"Ambiguous title: {selector}")
+                            sys.exit(1)
+                        else:
+                            print(f"Document not found: {selector}")
+                            sys.exit(1)
+
+                cur.execute(
+                    "UPDATE documents SET title = %s WHERE id = %s",
+                    (new_title, doc_id),
+                )
+                db.conn.commit()
+
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"✓ Document renamed: {old_title} → {new_title}")

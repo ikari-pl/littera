@@ -36,6 +36,7 @@ ROUTES = [
     (re.compile(r"^/api/sections/([^/]+)/blocks$"), "GET", "_get_blocks"),
     (re.compile(r"^/api/blocks/batch$"), "PUT", "_put_blocks_batch"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "GET", "_get_block"),
+    (re.compile(r"^/api/blocks/([^/]+)/language$"), "PUT", "_put_block_language"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "PUT", "_put_block"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "DELETE", "_delete_block"),
     (re.compile(r"^/api/blocks$"), "POST", "_post_block"),
@@ -277,6 +278,20 @@ class SidecarHandler(BaseHTTPRequestHandler):
             cur.execute(
                 "UPDATE blocks SET source_text = %s WHERE id = %s",
                 (source_text, block_id),
+            )
+        conn.commit()
+        return {"ok": True}
+
+    def _put_block_language(self, block_id: str):
+        body = self._read_json_body()
+        language = body.get("language")
+        if language is None:
+            return {"error": "language required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE blocks SET language = %s WHERE id = %s",
+                (language, block_id),
             )
         conn.commit()
         return {"ok": True}

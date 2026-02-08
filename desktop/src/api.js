@@ -85,6 +85,10 @@ export function deleteBlock(port, blockId) {
   return del(port, `/api/blocks/${blockId}`);
 }
 
+export function setBlockLanguage(port, blockId, language) {
+  return put(port, `/api/blocks/${blockId}/language`, { language });
+}
+
 export function renameDocument(port, id, title) {
   return put(port, `/api/documents/${id}`, { title });
 }
