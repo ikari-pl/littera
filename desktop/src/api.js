@@ -171,6 +171,19 @@ export function setMentionSurface(port, mentionId, features) {
   return put(port, `/api/mentions/${mentionId}/surface`, { features });
 }
 
+// Import / Export
+export function exportJSON(port) {
+  return get(port, "/api/export/json");
+}
+
+export function exportMarkdown(port) {
+  return get(port, "/api/export/markdown");
+}
+
+export function importJSON(port, data) {
+  return post(port, "/api/import/json", data);
+}
+
 // Reviews
 export function fetchReviews(port) {
   return get(port, "/api/reviews");

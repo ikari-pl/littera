@@ -58,6 +58,13 @@ review_app = typer.Typer(help="Manage reviews")
 app.add_typer(review_app, name="review")
 app.add_typer(review_app, name="reviews")
 
+# Export / Import
+export_app = typer.Typer(help="Export work data")
+app.add_typer(export_app, name="export")
+
+import_app = typer.Typer(help="Import work data")
+app.add_typer(import_app, name="import")
+
 
 # =============================================================================
 # Register commands to subgroups
@@ -86,6 +93,11 @@ entity_suggest_cmd.register(entity_app)  # adds suggest-label
 mention_cmd.register(mention_app)
 alignment_cmd.register(alignment_app)
 review_cmd.register(review_app)
+
+from littera.cli import io as io_cmd
+
+io_cmd.register_export(export_app)
+io_cmd.register_import(import_app)
 
 
 # =============================================================================

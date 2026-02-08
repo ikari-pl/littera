@@ -58,6 +58,9 @@ ROUTES = [
     (re.compile(r"^/api/reviews$"), "GET", "_get_reviews"),
     (re.compile(r"^/api/reviews$"), "POST", "_post_review"),
     (re.compile(r"^/api/reviews/([^/]+)$"), "DELETE", "_delete_review"),
+    (re.compile(r"^/api/export/json$"), "GET", "_get_export_json"),
+    (re.compile(r"^/api/export/markdown$"), "GET", "_get_export_markdown"),
+    (re.compile(r"^/api/import/json$"), "POST", "_post_import_json"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
     (re.compile(r"^/health$"), "GET", "_health"),
 ]
@@ -226,6 +229,31 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 "mentions": mentions,
                 "note": note,
             }
+
+    # -----------------------------------------------------------------
+    # Import / Export handlers
+    # -----------------------------------------------------------------
+
+    def _get_export_json(self):
+        from littera.cli.io import export_work_json
+
+        return export_work_json(self.work_db.conn)
+
+    def _get_export_markdown(self):
+        from littera.cli.io import export_work_markdown
+
+        text = export_work_markdown(self.work_db.conn)
+        return {"markdown": text}
+
+    def _post_import_json(self):
+        from littera.cli.io import import_work_json
+
+        body = self._read_json_body()
+        try:
+            counts = import_work_json(self.work_db.conn, body)
+        except (ValueError, RuntimeError) as e:
+            return {"error": str(e)}
+        return {"ok": True, "counts": counts}
 
     def _get_status(self):
         cfg = self.work_db.cfg
