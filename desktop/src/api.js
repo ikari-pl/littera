@@ -105,6 +105,10 @@ export function reorderSection(port, sectionId, position) {
   return put(port, `/api/sections/${sectionId}/order`, { position });
 }
 
+export function reorderBlock(port, blockId, position) {
+  return put(port, `/api/blocks/${blockId}/order`, { position });
+}
+
 export function createDocument(port, title) {
   return post(port, "/api/documents", { title });
 }
@@ -207,6 +211,10 @@ export function fetchReviews(port) {
 
 export function createReview(port, description, opts = {}) {
   return post(port, "/api/reviews", { description, ...opts });
+}
+
+export function updateReview(port, reviewId, fields) {
+  return put(port, `/api/reviews/${reviewId}`, fields);
 }
 
 export function deleteReview(port, reviewId) {

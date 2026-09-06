@@ -1598,6 +1598,7 @@ body {
   color: var(--fg-dim);
 }
 
+.review-edit-btn,
 .review-delete-btn {
   background: none;
   border: none;
@@ -1610,6 +1611,7 @@ body {
   flex-shrink: 0;
 }
 
+.review-row:hover .review-edit-btn,
 .review-row:hover .review-delete-btn {
   opacity: 1;
 }

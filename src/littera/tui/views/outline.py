@@ -22,7 +22,7 @@ class OutlineView(View):
     def _get_hints(self, nav_level: str, has_selection: bool) -> str:
         """Get contextual hints for current navigation level."""
         base_hints = {
-            "documents": "a:add doc  d:delete  Enter:drill  Esc:back  e:entities",
+            "documents": "a:add doc  d:delete  Enter:drill  Esc:back  e:entities  x:export  i:import",
             "sections": "a:add sec  d:delete  Enter:drill  Esc:back  Ctrl+E:edit title",
             "blocks": "a:add blk  d:delete  Enter:edit  l:link entity  Esc:back",
         }
@@ -50,6 +50,8 @@ class OutlineView(View):
 {h}Enter  — drill into document{e}
 {h}a      — add new document{e}
 {h}e      — switch to Entities{e}
+{h}x / X  — export JSON / Markdown{e}
+{h}i      — import JSON{e}
 """
 
         elif nav_level == "sections":

@@ -165,6 +165,27 @@ function routeHandler(route, request) {
     return route.fulfill({ json: { status: "ok" } });
   }
 
+  // GET /api/reviews
+  if (method === "GET" && path === "/api/reviews") {
+    return route.fulfill({
+      json: MOCK_DATA.reviews || [
+        {
+          id: "rev-1",
+          description: "Needs a stronger opening",
+          severity: "medium",
+          scope: null,
+          issue_type: null,
+        },
+      ],
+    });
+  }
+
+  // PUT /api/reviews/:id
+  const reviewPut = path.match(/^\/api\/reviews\/([^/]+)$/);
+  if (method === "PUT" && reviewPut) {
+    return route.fulfill({ json: { ok: true } });
+  }
+
   // POST /api/documents
   if (method === "POST" && path === "/api/documents") {
     return route.fulfill({
@@ -196,6 +217,12 @@ function routeHandler(route, request) {
   // PUT /api/blocks/batch
   if (method === "PUT" && path === "/api/blocks/batch") {
     return route.fulfill({ json: { success: true } });
+  }
+
+  // PUT /api/blocks/:id/order
+  const blkOrderMatch = path.match(/^\/api\/blocks\/([^/]+)\/order$/);
+  if (method === "PUT" && blkOrderMatch) {
+    return route.fulfill({ json: { ok: true } });
   }
 
   // PUT /api/blocks/:id

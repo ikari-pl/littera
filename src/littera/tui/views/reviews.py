@@ -18,7 +18,7 @@ class ReviewsView(View):
 
     def render(self, state: AppState):
         """Pure render from state.reviews.items and state.reviews.detail."""
-        hints = "a:add review  d:delete  o:outline  e:entities  Esc:back"
+        hints = "a:add  ctrl+e:edit  d:delete  o:outline  e:entities  Esc:back"
 
         items = []
         for review_item in state.reviews.items:

@@ -28,7 +28,7 @@ def _resolve_block_global(cur, selector: str) -> tuple[str, str, str]:
         FROM blocks b
         JOIN sections s ON s.id = b.section_id
         JOIN documents d ON d.id = s.document_id
-        ORDER BY d.created_at, s.order_index, b.created_at
+        ORDER BY d.order_index NULLS LAST, d.created_at, s.order_index NULLS LAST, b.order_index NULLS LAST, b.created_at
         """
     )
     rows = cur.fetchall()

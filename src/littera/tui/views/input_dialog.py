@@ -5,6 +5,8 @@ from textual.widgets import Button, Input, Static
 
 
 class InputDialog(Screen[str]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
     def __init__(self, title: str, prompt: str, default: str = ""):
         super().__init__()
         self._title = title
@@ -21,6 +23,15 @@ class InputDialog(Screen[str]):
             id="dialog",
         )
 
+    def on_mount(self) -> None:
+        self.query_one("#input", Input).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value or self._default)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "ok":
             input_widget = self.query_one("#input", Input)
@@ -30,6 +41,12 @@ class InputDialog(Screen[str]):
 
 
 class ConfirmDialog(Screen[bool]):
+    BINDINGS = [
+        ("y", "confirm", "Yes"),
+        ("n", "cancel", "No"),
+        ("escape", "cancel", "Cancel"),
+    ]
+
     def __init__(self, title: str, message: str):
         super().__init__()
         self._title = title
@@ -43,6 +60,12 @@ class ConfirmDialog(Screen[bool]):
             Button("No", id="no"),
             id="dialog",
         )
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "yes")

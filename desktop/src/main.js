@@ -599,6 +599,32 @@ const handlers = {
     }
   },
 
+  async onEditReview(reviewId) {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    const current = store.getState().reviews.find((r) => r.id === reviewId);
+    const description = window.prompt(
+      "Review description:",
+      current ? current.description : "",
+    );
+    if (!description) return;
+    const severity = window.prompt(
+      "Severity (low/medium/high):",
+      current ? current.severity || "medium" : "medium",
+    );
+    if (!severity) return;
+    try {
+      const result = await api.updateReview(port, reviewId, { description, severity });
+      if (result && result.error) {
+        store.dispatch({ type: "error", message: result.error });
+        return;
+      }
+      await loadReviews();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onDeleteReview(reviewId) {
     const port = store.getState().sidecarPort;
     if (!port) return;

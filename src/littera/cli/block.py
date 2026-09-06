@@ -1,4 +1,4 @@
-"""Block commands: littera block add|list|edit|delete|set-language
+"""Block commands: littera block add|list|edit|delete|set-language|move
 
 Section resolution: section selectors are scoped to a document when a
 document context is available.  For `add` and `list`, the caller provides
@@ -27,7 +27,7 @@ def _resolve_section_global(cur, selector: str) -> tuple[str, str]:
         SELECT s.id, s.title, d.title
         FROM sections s
         JOIN documents d ON d.id = s.document_id
-        ORDER BY d.created_at, s.order_index
+        ORDER BY d.order_index NULLS LAST, d.created_at, s.order_index NULLS LAST, s.created_at
         """
     )
     rows = cur.fetchall()
@@ -61,7 +61,7 @@ def _resolve_section_global(cur, selector: str) -> tuple[str, str]:
 def _resolve_block_in_section(cur, section_id: str, selector: str) -> tuple[str, str, str]:
     """Resolve a block selector scoped to a specific section."""
     cur.execute(
-        "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+        "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
         (section_id,),
     )
     rows = cur.fetchall()
@@ -91,7 +91,7 @@ def _resolve_block_global(cur, selector: str) -> tuple[str, str, str]:
         FROM blocks b
         JOIN sections s ON s.id = b.section_id
         JOIN documents d ON d.id = s.document_id
-        ORDER BY d.created_at, s.order_index, b.created_at
+        ORDER BY d.order_index NULLS LAST, d.created_at, s.order_index NULLS LAST, b.order_index NULLS LAST, b.created_at
         """
     )
     rows = cur.fetchall()
@@ -128,10 +128,11 @@ def register(app: typer.Typer):
                 block_id = str(uuid.uuid4())
                 cur.execute(
                     """
-                    INSERT INTO blocks (id, section_id, block_type, language, source_text)
-                    VALUES (%s, %s, 'paragraph', %s, %s)
+                    INSERT INTO blocks (id, section_id, block_type, language, source_text, order_index)
+                    VALUES (%s, %s, 'paragraph', %s, %s,
+                            COALESCE((SELECT MAX(order_index)+1 FROM blocks WHERE section_id = %s), 1))
                     """,
-                    (block_id, sec_id, lang, text),
+                    (block_id, sec_id, lang, text, sec_id),
                 )
                 db.conn.commit()
         except RuntimeError as e:
@@ -148,7 +149,7 @@ def register(app: typer.Typer):
                 cur = db.conn.cursor()
                 sec_id, sec_title = _resolve_section_global(cur, section)
                 cur.execute(
-                    "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+                    "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
                     (sec_id,),
                 )
                 rows = cur.fetchall()
@@ -252,3 +253,39 @@ def register(app: typer.Typer):
             sys.exit(1)
 
         print(f"✓ Block language changed: {old_lang} → {language}")
+
+    @app.command()
+    def move(block: str, position: int):
+        """Move a block to a new position within its section (1-based)."""
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                block_id, lang, text = _resolve_block_global(cur, block)
+
+                cur.execute(
+                    "SELECT id FROM blocks "
+                    "WHERE section_id = (SELECT section_id FROM blocks WHERE id = %s) "
+                    "ORDER BY order_index NULLS LAST, created_at",
+                    (block_id,),
+                )
+                ids = [str(r[0]) for r in cur.fetchall()]
+
+                if position < 1 or position > len(ids):
+                    print(f"Position must be between 1 and {len(ids)}")
+                    sys.exit(1)
+
+                ids.remove(str(block_id))
+                ids.insert(position - 1, str(block_id))
+
+                for idx, bid in enumerate(ids, 1):
+                    cur.execute(
+                        "UPDATE blocks SET order_index = %s WHERE id = %s",
+                        (idx, bid),
+                    )
+                db.conn.commit()
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        preview = text.replace("\n", " ")[:40]
+        print(f"✓ Block moved: ({lang}) {preview} → position {position}")

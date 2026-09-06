@@ -48,6 +48,7 @@ CREATE TABLE blocks (
     block_type TEXT NOT NULL,
     language TEXT NOT NULL,
     source_text TEXT NOT NULL,
+    order_index INTEGER,
     metadata JSONB
 );
 

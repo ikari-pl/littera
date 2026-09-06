@@ -40,7 +40,7 @@ def refresh_outline(state: AppState) -> None:
                     items.append(OutlineItem(id=str(sec_id), kind="section", title=title))
             elif last.kind == "section":
                 cur.execute(
-                    "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+                    "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
                     (last.id,),
                 )
                 for block_id, lang, text in cur.fetchall():
@@ -352,6 +352,19 @@ def fetch_block_text(db, block_id: str) -> tuple[str, str]:
         if row is None:
             raise LookupError(f"Block {block_id} not found")
     return row[0], row[1]
+
+
+def fetch_review(db, review_id: str) -> tuple[str, str]:
+    """Return (description, severity) for a review."""
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT description, severity FROM reviews WHERE id = %s",
+            (review_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise LookupError(f"Review {review_id} not found")
+    return row[0] or "", row[1] or "medium"
 
 
 def fetch_block_mentions(db, block_id: str) -> list[tuple[str, str, str, str, str | None]]:

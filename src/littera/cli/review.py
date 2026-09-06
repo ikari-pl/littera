@@ -1,4 +1,4 @@
-"""Review commands: littera review add|list|delete"""
+"""Review commands: littera review add|list|edit|delete"""
 
 from __future__ import annotations
 
@@ -180,6 +180,106 @@ def register(app: typer.Typer) -> None:
             type_label = f" ({issue_type})" if issue_type else ""
             preview = desc.replace("\n", " ")[:60] if desc else ""
             print(f"[{idx}] [{severity}]{scope_label}{type_label} \"{preview}\"")
+
+    @app.command()
+    def edit(
+        selector: str,
+        description: Optional[str] = typer.Option(None, "--description", "-d"),
+        scope: Optional[str] = typer.Option(None, "--scope", "-s"),
+        scope_id: Optional[str] = typer.Option(None, "--scope-id"),
+        type: Optional[str] = typer.Option(None, "--type", "-t"),
+        severity: Optional[str] = typer.Option(None, "--severity"),
+        metadata: Optional[str] = typer.Option(None, "--metadata", "-m"),
+        clear_scope: bool = typer.Option(False, "--clear-scope"),
+    ) -> None:
+        """Edit a review. Only provided fields are changed."""
+        if severity is not None and severity not in VALID_SEVERITIES:
+            print(f"Invalid severity: {severity} (must be low, medium, or high)")
+            sys.exit(1)
+
+        if scope is not None and scope not in VALID_SCOPES:
+            print(f"Invalid scope: {scope} (must be one of: {', '.join(sorted(VALID_SCOPES))})")
+            sys.exit(1)
+
+        if scope_id and not scope:
+            print("--scope-id requires --scope")
+            sys.exit(1)
+
+        if clear_scope and (scope or scope_id):
+            print("--clear-scope cannot be combined with --scope")
+            sys.exit(1)
+
+        parsed_metadata = None
+        if metadata is not None:
+            if metadata == "":
+                parsed_metadata = ""
+            else:
+                try:
+                    parsed_metadata = json.loads(metadata)
+                except json.JSONDecodeError as e:
+                    print(f"Invalid metadata JSON: {e}")
+                    sys.exit(1)
+
+        try:
+            with open_work_db() as db:
+                cur = db.conn.cursor()
+                rid, desc, current_scope, current_scope_id = _resolve_review(cur, selector)
+
+                updates: list[str] = []
+                params: list = []
+
+                if description is not None:
+                    if not description.strip():
+                        print("Description cannot be empty")
+                        sys.exit(1)
+                    updates.append("description = %s")
+                    params.append(description)
+
+                if severity is not None:
+                    updates.append("severity = %s")
+                    params.append(severity)
+
+                if type is not None:
+                    updates.append("issue_type = %s")
+                    params.append(type if type else None)
+
+                if metadata is not None:
+                    if parsed_metadata == "":
+                        updates.append("metadata = NULL")
+                    else:
+                        updates.append("metadata = %s")
+                        params.append(json.dumps(parsed_metadata))
+
+                if clear_scope:
+                    updates.append("scope = NULL")
+                    updates.append("scope_id = NULL")
+                elif scope is not None:
+                    updates.append("scope = %s")
+                    params.append(scope)
+                    if scope_id:
+                        resolved_scope_id = _resolve_scope_id(cur, scope, scope_id)
+                        updates.append("scope_id = %s")
+                        params.append(resolved_scope_id)
+                    elif scope != current_scope:
+                        print("--scope-id required when changing scope")
+                        sys.exit(1)
+
+                if not updates:
+                    print("Nothing to change. Provide at least one field.")
+                    sys.exit(1)
+
+                params.append(rid)
+                cur.execute(
+                    f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
+                    params,
+                )
+                db.conn.commit()
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        preview = (description or desc or "").replace("\n", " ")[:40]
+        print(f"✓ Review updated: \"{preview}\"")
 
     @app.command()
     def delete(selector: str) -> None:

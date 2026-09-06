@@ -117,7 +117,7 @@ def seeded_ids(seeded_work):
         "SELECT b.id, b.language, b.source_text FROM blocks b "
         "JOIN sections s ON s.id = b.section_id "
         "JOIN documents d ON d.id = s.document_id "
-        "ORDER BY d.created_at, s.order_index, b.created_at"
+        "ORDER BY d.created_at, s.order_index, b.order_index NULLS LAST, b.created_at"
     )
     blks = cur.fetchall()
 

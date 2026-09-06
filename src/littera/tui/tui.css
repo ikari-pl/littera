@@ -23,6 +23,14 @@
   padding: 1;
 }
 
+#dialog {
+  width: 60;
+  height: auto;
+  border: thick $primary;
+  background: $surface;
+  padding: 1 2;
+}
+
 ErrorScreen {
     align: center middle;
 }

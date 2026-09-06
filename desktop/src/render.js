@@ -1273,6 +1273,15 @@ function renderReviewList(el, state, handlers) {
     desc.textContent = (r.description || "").replace("\n", " ").slice(0, 100);
     row.appendChild(desc);
 
+    if (handlers && handlers.onEditReview) {
+      const editBtn = document.createElement("button");
+      editBtn.className = "review-edit-btn";
+      editBtn.textContent = "edit";
+      editBtn.title = "Edit review";
+      editBtn.addEventListener("click", () => handlers.onEditReview(r.id));
+      row.appendChild(editBtn);
+    }
+
     if (handlers && handlers.onDeleteReview) {
       const delBtn = document.createElement("button");
       delBtn.className = "review-delete-btn";

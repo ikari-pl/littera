@@ -6,6 +6,7 @@ orchestrators: guard → call actions.py → dispatch state → render.
 
 import json
 import uuid
+from pathlib import Path
 
 
 # =============================================================================
@@ -42,9 +43,10 @@ def create_block(db, section_id: str) -> str:
     block_id = str(uuid.uuid4())
     with db.cursor() as cur:
         cur.execute(
-            "INSERT INTO blocks (id, section_id, block_type, language, source_text) "
-            "VALUES (%s, %s, 'paragraph', 'en', '(new block)')",
-            (block_id, section_id),
+            "INSERT INTO blocks (id, section_id, block_type, language, source_text, order_index) "
+            "VALUES (%s, %s, 'paragraph', 'en', '(new block)', "
+            "COALESCE((SELECT MAX(order_index)+1 FROM blocks WHERE section_id = %s), 1))",
+            (block_id, section_id, section_id),
         )
     db.commit()
     return block_id
@@ -88,6 +90,32 @@ def delete_review(db, review_id: str) -> None:
     db.commit()
 
 
+def update_review(
+    db,
+    review_id: str,
+    description: str | None = None,
+    severity: str | None = None,
+) -> None:
+    """Update provided review fields."""
+    updates: list[str] = []
+    params: list = []
+    if description is not None:
+        updates.append("description = %s")
+        params.append(description)
+    if severity is not None:
+        updates.append("severity = %s")
+        params.append(severity)
+    if not updates:
+        return
+    params.append(review_id)
+    with db.cursor() as cur:
+        cur.execute(
+            f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
+            params,
+        )
+    db.commit()
+
+
 def delete_item(db, kind: str, item_id: str) -> None:
     """Delete a document, section, or block by kind and id."""
     with db.cursor() as cur:
@@ -114,44 +142,49 @@ def delete_entity(db, entity_id: str) -> None:
 # =============================================================================
 
 def move_item(db, kind: str, item_id: str, new_position: int) -> bool:
-    """Move a document or section to a new position (1-based).
+    """Move a document, section, or block to a new position (1-based).
 
-    For documents: reorders among siblings in the same work.
-    For sections: reorders among siblings in the same document.
+    Documents reorder among siblings in the same work.
+    Sections reorder among siblings in the same document.
+    Blocks reorder among siblings in the same section.
 
     Returns True if the move was applied, False if position is out of range.
     """
-    with db.cursor() as cur:
-        if kind == "document":
-            # Get siblings: all documents in the same work
-            cur.execute(
-                "SELECT id FROM documents "
-                "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
-                "ORDER BY order_index NULLS LAST, created_at",
-                (item_id,),
-            )
-        elif kind == "section":
-            # Get siblings: all sections in the same document
-            cur.execute(
-                "SELECT id FROM sections "
-                "WHERE document_id = (SELECT document_id FROM sections WHERE id = %s) "
-                "ORDER BY order_index NULLS LAST, created_at",
-                (item_id,),
-            )
-        else:
-            return False
+    tables = {
+        "document": (
+            "documents",
+            "SELECT id FROM documents "
+            "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
+            "ORDER BY order_index NULLS LAST, created_at",
+        ),
+        "section": (
+            "sections",
+            "SELECT id FROM sections "
+            "WHERE document_id = (SELECT document_id FROM sections WHERE id = %s) "
+            "ORDER BY order_index NULLS LAST, created_at",
+        ),
+        "block": (
+            "blocks",
+            "SELECT id FROM blocks "
+            "WHERE section_id = (SELECT section_id FROM blocks WHERE id = %s) "
+            "ORDER BY order_index NULLS LAST, created_at",
+        ),
+    }
+    spec = tables.get(kind)
+    if spec is None:
+        return False
+    table, sibling_sql = spec
 
+    with db.cursor() as cur:
+        cur.execute(sibling_sql, (item_id,))
         ids = [str(r[0]) for r in cur.fetchall()]
 
         if new_position < 1 or new_position > len(ids):
             return False
 
-        # Remove target, insert at new position
         ids.remove(str(item_id))
         ids.insert(new_position - 1, str(item_id))
 
-        # Bulk update order_index
-        table = "documents" if kind == "document" else "sections"
         for idx, row_id in enumerate(ids, 1):
             cur.execute(
                 f"UPDATE {table} SET order_index = %s WHERE id = %s",
@@ -372,3 +405,40 @@ def delete_alignment(db, alignment_id: str) -> None:
     with db.cursor() as cur:
         cur.execute("DELETE FROM block_alignments WHERE id = %s", (alignment_id,))
     db.commit()
+
+
+# =============================================================================
+# Import / Export (same functions as CLI and desktop sidecar)
+# =============================================================================
+
+def export_json_to_path(db, path: str) -> Path:
+    """Export the work as JSON to path. Returns the resolved Path."""
+    from littera.cli.io import export_work_json
+
+    dest = Path(path).expanduser()
+    data = export_work_json(db)
+    dest.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return dest
+
+
+def export_markdown_to_path(db, path: str) -> Path:
+    """Export the work as Markdown to path. Returns the resolved Path."""
+    from littera.cli.io import export_work_markdown
+
+    dest = Path(path).expanduser()
+    dest.write_text(export_work_markdown(db), encoding="utf-8")
+    return dest
+
+
+def import_json_from_path(db, path: str) -> dict:
+    """Import a work JSON file into the current work. Returns summary counts."""
+    from littera.cli.io import import_work_json
+
+    src = Path(path).expanduser()
+    if not src.exists():
+        raise FileNotFoundError(f"File not found: {src}")
+    try:
+        data = json.loads(src.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}") from e
+    return import_work_json(db, data)

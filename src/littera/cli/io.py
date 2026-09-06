@@ -48,8 +48,8 @@ def export_work_json(conn) -> dict:
         sections = []
         for sec_id, sec_title, order_idx in cur.fetchall():
             cur.execute(
-                "SELECT id, block_type, language, source_text "
-                "FROM blocks WHERE section_id = %s ORDER BY created_at",
+                "SELECT id, block_type, language, source_text, order_index "
+                "FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
                 (sec_id,),
             )
             blocks = [
@@ -58,8 +58,9 @@ def export_work_json(conn) -> dict:
                     "block_type": btype,
                     "language": lang,
                     "source_text": text,
+                    "order_index": order_idx,
                 }
-                for bid, btype, lang, text in cur.fetchall()
+                for bid, btype, lang, text, order_idx in cur.fetchall()
             ]
             sections.append(
                 {
@@ -187,7 +188,7 @@ def export_work_markdown(conn) -> str:
             lines.append("")
 
             cur.execute(
-                "SELECT language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+                "SELECT language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
                 (sec_id,),
             )
             for lang, text in cur.fetchall():
@@ -302,21 +303,25 @@ def import_work_json(conn, data: dict) -> dict:
             )
             counts["sections"] += 1
 
-            for blk in sec.get("blocks", []):
+            for idx, blk in enumerate(sec.get("blocks", []), 1):
                 blk_old_id = blk.get("id")
                 blk_new_id = blk_old_id or str(uuid.uuid4())
                 cur.execute("SELECT id FROM blocks WHERE id = %s", (blk_new_id,))
                 if cur.fetchone():
                     blk_new_id = str(uuid.uuid4())
+                order_index = blk.get("order_index")
+                if order_index is None:
+                    order_index = idx
                 cur.execute(
-                    "INSERT INTO blocks (id, section_id, block_type, language, source_text) "
-                    "VALUES (%s, %s, %s, %s, %s)",
+                    "INSERT INTO blocks (id, section_id, block_type, language, source_text, order_index) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
                     (
                         blk_new_id,
                         sec_new_id,
                         blk.get("block_type", "paragraph"),
                         blk.get("language", "en"),
                         blk.get("source_text", ""),
+                        order_index,
                     ),
                 )
                 block_id_map[blk_old_id] = blk_new_id

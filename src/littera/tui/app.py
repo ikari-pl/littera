@@ -92,6 +92,9 @@ class LitteraApp(App):
         ("ctrl+l", "set_language", "Set Language"),
         ("ctrl+up", "move_up", "Move Up"),
         ("ctrl+down", "move_down", "Move Down"),
+        ("x", "export_json", "Export JSON"),
+        ("X", "export_markdown", "Export MD"),
+        ("i", "import_json", "Import JSON"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -318,12 +321,12 @@ class LitteraApp(App):
 
     @safe_action
     def action_move_up(self) -> None:
-        """Move selected document or section up by one position."""
+        """Move selected document, section, or block up by one position."""
         self._move_selected(-1)
 
     @safe_action
     def action_move_down(self) -> None:
-        """Move selected document or section down by one position."""
+        """Move selected document, section, or block down by one position."""
         self._move_selected(+1)
 
     def _move_selected(self, direction: int) -> None:
@@ -332,7 +335,7 @@ class LitteraApp(App):
             return
 
         sel = self.state.entity_selection
-        if not sel.id or sel.kind not in ("document", "section"):
+        if not sel.id or sel.kind not in ("document", "section", "block"):
             return
 
         # Find current position among siblings
@@ -532,9 +535,50 @@ class LitteraApp(App):
         )
 
     @safe_action
-    def action_edit_title(self) -> None:
-        """Edit title of selected document or section."""
+    def _prompt_edit_review(self) -> None:
+        """Chain dialogs to edit the selected review: description then severity."""
         if self.state is None:
+            return
+        sel = self.state.reviews.selection
+        if not sel or sel.kind != "review" or not sel.id:
+            return
+
+        review_id = sel.id
+        current_desc, current_severity = queries.fetch_review(self.state.db, review_id)
+
+        async def on_desc_result(description: str | None) -> None:
+            if not description:
+                return
+
+            async def on_severity_result(severity: str | None) -> None:
+                if not severity:
+                    return
+                severity = severity.strip().lower()
+                if severity not in ("low", "medium", "high"):
+                    self.notify("Severity must be low, medium, or high", severity="warning")
+                    return
+                actions.update_review(
+                    self.state.db, review_id, description=description, severity=severity
+                )
+                self._render_view()
+
+            self.push_screen(
+                InputDialog("Edit Review", "Severity (low/medium/high):", current_severity),
+                on_severity_result,
+            )
+
+        self.push_screen(
+            InputDialog("Edit Review", "Description:", current_desc),
+            on_desc_result,
+        )
+
+    @safe_action
+    def action_edit_title(self) -> None:
+        """Edit title of selected document or section, or edit a review."""
+        if self.state is None:
+            return
+        if self.state.view == "reviews":
+            self._prompt_edit_review()
             return
         if self.state.view != "outline":
             return
@@ -1031,6 +1075,141 @@ class LitteraApp(App):
             )
         self.state.db.commit()
         self.notify(f'Surface form set: "{result}"')
+        self._render_view()
+
+    # =====================
+    # Import / Export
+    # =====================
+
+    def _busy_editing(self) -> bool:
+        """True when an edit session is open; import/export must wait."""
+        if self.state is None or self.state.view != "editor":
+            return False
+        self.notify("Save or cancel the edit first", severity="warning")
+        return True
+
+    @safe_action
+    def action_export_json(self) -> None:
+        """Export the work as JSON to a file path."""
+        if self.state is None or self._busy_editing():
+            return
+
+        async def on_path(path: str | None) -> None:
+            if not path or not path.strip():
+                return
+            path = path.strip()
+            dest = Path(path).expanduser()
+            if dest.exists():
+
+                async def on_overwrite(confirmed: bool) -> None:
+                    if confirmed:
+                        self._do_export_json(path)
+
+                self.push_screen(
+                    ConfirmDialog("Overwrite file?", f"{dest} already exists."),
+                    on_overwrite,
+                )
+                return
+            self._do_export_json(path)
+
+        self.push_screen(
+            InputDialog("Export JSON", "File path:", "export.json"),
+            on_path,
+        )
+
+    @safe_action
+    def action_export_markdown(self) -> None:
+        """Export the work as Markdown to a file path."""
+        if self.state is None or self._busy_editing():
+            return
+
+        async def on_path(path: str | None) -> None:
+            if not path or not path.strip():
+                return
+            path = path.strip()
+            dest = Path(path).expanduser()
+            if dest.exists():
+
+                async def on_overwrite(confirmed: bool) -> None:
+                    if confirmed:
+                        self._do_export_markdown(path)
+
+                self.push_screen(
+                    ConfirmDialog("Overwrite file?", f"{dest} already exists."),
+                    on_overwrite,
+                )
+                return
+            self._do_export_markdown(path)
+
+        self.push_screen(
+            InputDialog("Export Markdown", "File path:", "export.md"),
+            on_path,
+        )
+
+    @safe_action
+    def action_import_json(self) -> None:
+        """Import a JSON export into the current work."""
+        if self.state is None or self._busy_editing():
+            return
+
+        async def on_path(path: str | None) -> None:
+            if not path or not path.strip():
+                return
+            path = path.strip()
+            src = Path(path).expanduser()
+            if not src.exists():
+                self.notify(f"File not found: {src}", severity="error")
+                return
+
+            async def on_confirm(confirmed: bool) -> None:
+                if confirmed:
+                    self._do_import_json(path)
+
+            self.push_screen(
+                ConfirmDialog(
+                    "Import JSON?",
+                    "This adds documents, entities, and related data to the current work.",
+                ),
+                on_confirm,
+            )
+
+        self.push_screen(
+            InputDialog("Import JSON", "File path:", ""),
+            on_path,
+        )
+
+    def _do_export_json(self, path: str) -> None:
+        if self.state is None:
+            return
+        try:
+            dest = actions.export_json_to_path(self.state.db, path)
+        except OSError as e:
+            self.notify(f"Export failed: {e}", severity="error")
+            return
+        self.notify(f"Exported JSON to {dest}")
+
+    def _do_export_markdown(self, path: str) -> None:
+        if self.state is None:
+            return
+        try:
+            dest = actions.export_markdown_to_path(self.state.db, path)
+        except OSError as e:
+            self.notify(f"Export failed: {e}", severity="error")
+            return
+        self.notify(f"Exported Markdown to {dest}")
+
+    def _do_import_json(self, path: str) -> None:
+        if self.state is None:
+            return
+        try:
+            counts = actions.import_json_from_path(self.state.db, path)
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as e:
+            self.notify(str(e), severity="error")
+            return
+        parts = [f"{v} {k}" for k, v in counts.items() if v > 0]
+        summary = ", ".join(parts) if parts else "nothing"
+        self.notify(f"Imported: {summary}")
+        self.state.dispatch(ClearSelection())
         self._render_view()
 
     # =====================

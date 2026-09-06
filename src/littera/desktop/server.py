@@ -39,6 +39,7 @@ ROUTES = [
     (re.compile(r"^/api/blocks/batch$"), "PUT", "_put_blocks_batch"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "GET", "_get_block"),
     (re.compile(r"^/api/blocks/([^/]+)/language$"), "PUT", "_put_block_language"),
+    (re.compile(r"^/api/blocks/([^/]+)/order$"), "PUT", "_put_block_order"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "PUT", "_put_block"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "DELETE", "_delete_block"),
     (re.compile(r"^/api/blocks$"), "POST", "_post_block"),
@@ -61,6 +62,7 @@ ROUTES = [
     (re.compile(r"^/api/alignments/([^/]+)$"), "DELETE", "_delete_alignment"),
     (re.compile(r"^/api/reviews$"), "GET", "_get_reviews"),
     (re.compile(r"^/api/reviews$"), "POST", "_post_review"),
+    (re.compile(r"^/api/reviews/([^/]+)$"), "PUT", "_put_review"),
     (re.compile(r"^/api/reviews/([^/]+)$"), "DELETE", "_delete_review"),
     (re.compile(r"^/api/export/json$"), "GET", "_get_export_json"),
     (re.compile(r"^/api/export/markdown$"), "GET", "_get_export_markdown"),
@@ -125,7 +127,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
     def _get_blocks(self, section_id: str):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, block_type, language, source_text FROM blocks WHERE section_id = %s ORDER BY created_at",
+                "SELECT id, block_type, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
                 (section_id,),
             )
             return [
@@ -331,6 +333,37 @@ class SidecarHandler(BaseHTTPRequestHandler):
         conn.commit()
         return {"ok": True}
 
+    def _put_block_order(self, block_id: str):
+        body = self._read_json_body()
+        position = body.get("position")
+        if position is None or not isinstance(position, int):
+            return {"error": "position (integer) required"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM blocks "
+                "WHERE section_id = (SELECT section_id FROM blocks WHERE id = %s) "
+                "ORDER BY order_index NULLS LAST, created_at",
+                (block_id,),
+            )
+            ids = [str(r[0]) for r in cur.fetchall()]
+
+            if str(block_id) not in ids:
+                return {"error": "block not found"}
+            if position < 1 or position > len(ids):
+                return {"error": f"position must be between 1 and {len(ids)}"}
+
+            ids.remove(str(block_id))
+            ids.insert(position - 1, str(block_id))
+
+            for idx, bid in enumerate(ids, 1):
+                cur.execute(
+                    "UPDATE blocks SET order_index = %s WHERE id = %s",
+                    (idx, bid),
+                )
+        conn.commit()
+        return {"ok": True}
+
     def _put_section_order(self, section_id: str):
         body = self._read_json_body()
         position = body.get("position")
@@ -417,13 +450,18 @@ class SidecarHandler(BaseHTTPRequestHandler):
         with conn.cursor() as cur:
             if block_id:
                 cur.execute(
-                    "INSERT INTO blocks (id, section_id, block_type, language, source_text) VALUES (%s, %s, %s, %s, %s)",
-                    (block_id, section_id, block_type, language, source_text),
+                    "INSERT INTO blocks (id, section_id, block_type, language, source_text, order_index) "
+                    "VALUES (%s, %s, %s, %s, %s, "
+                    "COALESCE((SELECT MAX(order_index)+1 FROM blocks WHERE section_id = %s), 1))",
+                    (block_id, section_id, block_type, language, source_text, section_id),
                 )
             else:
                 cur.execute(
-                    "INSERT INTO blocks (section_id, block_type, language, source_text) VALUES (%s, %s, %s, %s) RETURNING id",
-                    (section_id, block_type, language, source_text),
+                    "INSERT INTO blocks (section_id, block_type, language, source_text, order_index) "
+                    "VALUES (%s, %s, %s, %s, "
+                    "COALESCE((SELECT MAX(order_index)+1 FROM blocks WHERE section_id = %s), 1)) "
+                    "RETURNING id",
+                    (section_id, block_type, language, source_text, section_id),
                 )
                 block_id = str(cur.fetchone()[0])
         conn.commit()
@@ -829,6 +867,47 @@ class SidecarHandler(BaseHTTPRequestHandler):
             review_id = str(cur.fetchone()[0])
         conn.commit()
         return {"ok": True, "id": review_id}
+
+    def _put_review(self, review_id: str):
+        """Update a review. Only provided fields are changed."""
+        body = self._read_json_body()
+        allowed = ("description", "severity", "scope", "scope_id", "issue_type")
+        if not any(k in body for k in allowed):
+            return {"error": "no fields to update"}
+        severity = body.get("severity")
+        if severity is not None and severity not in ("low", "medium", "high"):
+            return {"error": "invalid severity"}
+        description = body.get("description")
+        if description is not None and not str(description).strip():
+            return {"error": "description cannot be empty"}
+        from littera.cli.review import VALID_SCOPES
+
+        if "scope" in body and body["scope"] is not None and body["scope"] not in VALID_SCOPES:
+            return {"error": "invalid scope"}
+        conn = self.work_db.conn
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, scope FROM reviews WHERE id = %s", (review_id,))
+            row = cur.fetchone()
+            if row is None:
+                return {"error": "review not found"}
+            current_scope = row[1]
+            if "scope" in body and body["scope"] != current_scope:
+                if not body.get("scope_id"):
+                    return {"error": "scope_id required when changing scope"}
+            updates = []
+            params = []
+            for col in allowed:
+                if col not in body:
+                    continue
+                updates.append(f"{col} = %s")
+                params.append(body[col])
+            params.append(review_id)
+            cur.execute(
+                f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
+                params,
+            )
+        conn.commit()
+        return {"ok": True}
 
     def _delete_review(self, review_id: str):
         conn = self.work_db.conn
