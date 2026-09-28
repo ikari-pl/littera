@@ -97,22 +97,17 @@ def update_review(
     severity: str | None = None,
 ) -> None:
     """Update provided review fields."""
-    updates: list[str] = []
-    params: list = []
+    from littera.cli.review import apply_review_update
+
+    fields: dict = {}
     if description is not None:
-        updates.append("description = %s")
-        params.append(description)
+        fields["description"] = description
     if severity is not None:
-        updates.append("severity = %s")
-        params.append(severity)
-    if not updates:
+        fields["severity"] = severity
+    if not fields:
         return
-    params.append(review_id)
     with db.cursor() as cur:
-        cur.execute(
-            f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
-            params,
-        )
+        apply_review_update(cur, review_id, **fields)
     db.commit()
 
 
@@ -150,46 +145,17 @@ def move_item(db, kind: str, item_id: str, new_position: int) -> bool:
 
     Returns True if the move was applied, False if position is out of range.
     """
-    tables = {
-        "document": (
-            "documents",
-            "SELECT id FROM documents "
-            "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
-            "ORDER BY order_index NULLS LAST, created_at",
-        ),
-        "section": (
-            "sections",
-            "SELECT id FROM sections "
-            "WHERE document_id = (SELECT document_id FROM sections WHERE id = %s) "
-            "ORDER BY order_index NULLS LAST, created_at",
-        ),
-        "block": (
-            "blocks",
-            "SELECT id FROM blocks "
-            "WHERE section_id = (SELECT section_id FROM blocks WHERE id = %s) "
-            "ORDER BY order_index NULLS LAST, created_at",
-        ),
-    }
-    spec = tables.get(kind)
-    if spec is None:
+    from littera.cli.block import reorder_siblings
+
+    tables = {"document": "documents", "section": "sections", "block": "blocks"}
+    table = tables.get(kind)
+    if table is None:
         return False
-    table, sibling_sql = spec
 
     with db.cursor() as cur:
-        cur.execute(sibling_sql, (item_id,))
-        ids = [str(r[0]) for r in cur.fetchall()]
-
-        if new_position < 1 or new_position > len(ids):
-            return False
-
-        ids.remove(str(item_id))
-        ids.insert(new_position - 1, str(item_id))
-
-        for idx, row_id in enumerate(ids, 1):
-            cur.execute(
-                f"UPDATE {table} SET order_index = %s WHERE id = %s",
-                (idx, row_id),
-            )
+        ok, _ = reorder_siblings(cur, table, item_id, new_position)
+    if not ok:
+        return False
     db.commit()
     return True
 
@@ -421,12 +387,12 @@ def export_json_to_path(db, path: str) -> Path:
     return dest
 
 
-def export_markdown_to_path(db, path: str) -> Path:
+def export_markdown_to_path(db, path: str, compile: bool = False) -> Path:
     """Export the work as Markdown to path. Returns the resolved Path."""
     from littera.cli.io import export_work_markdown
 
     dest = Path(path).expanduser()
-    dest.write_text(export_work_markdown(db), encoding="utf-8")
+    dest.write_text(export_work_markdown(db, compile=compile), encoding="utf-8")
     return dest
 
 

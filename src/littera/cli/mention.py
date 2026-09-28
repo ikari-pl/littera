@@ -7,19 +7,19 @@ from typing import Optional
 
 import typer
 
+from littera.cli.block import GLOBAL_BLOCK_ORDER_SQL
 from littera.db.workdb import open_work_db
 
 
 def _resolve_block(cur, selector: str) -> tuple[str, str]:
     """Resolve block selector to (id, language)."""
     cur.execute(
-        """
+        f"""
         SELECT b.id, b.language
         FROM blocks b
         JOIN sections s ON s.id = b.section_id
         JOIN documents d ON d.id = s.document_id
-        ORDER BY d.order_index NULLS LAST, d.created_at,
-                 s.order_index NULLS LAST, b.order_index NULLS LAST, b.created_at
+        ORDER BY {GLOBAL_BLOCK_ORDER_SQL}
         """
     )
     rows = cur.fetchall()

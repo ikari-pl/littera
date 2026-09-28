@@ -14,6 +14,103 @@ from littera.db.workdb import open_work_db
 VALID_SCOPES = {"work", "document", "section", "block", "entity", "alignment"}
 VALID_SEVERITIES = {"low", "medium", "high"}
 
+# Sentinel so callers can pass None to clear a field vs omit it.
+UNSET = object()
+
+
+class ReviewUpdateError(ValueError):
+    """Invalid review update (empty description, bad scope, nothing to change)."""
+
+    def __init__(self, message: str, http_error: str | None = None):
+        super().__init__(message)
+        self.http_error = http_error or message
+
+
+def apply_review_update(
+    cur,
+    review_id: str,
+    *,
+    description=UNSET,
+    severity=UNSET,
+    issue_type=UNSET,
+    metadata=UNSET,
+    scope=UNSET,
+    scope_id=UNSET,
+    clear_scope: bool = False,
+) -> None:
+    """Update only the fields the caller passed. Does not commit.
+
+    ``metadata=None`` clears metadata. ``clear_scope`` nulls scope and scope_id.
+    Raises ReviewUpdateError on validation failure or missing review.
+    """
+    cur.execute("SELECT id, scope FROM reviews WHERE id = %s", (review_id,))
+    row = cur.fetchone()
+    if row is None:
+        raise ReviewUpdateError("review not found", "review not found")
+    current_scope = row[1]
+
+    updates: list[str] = []
+    params: list = []
+
+    if description is not UNSET:
+        if not str(description).strip():
+            raise ReviewUpdateError(
+                "Description cannot be empty", "description cannot be empty"
+            )
+        updates.append("description = %s")
+        params.append(description)
+
+    if severity is not UNSET:
+        if severity not in VALID_SEVERITIES:
+            raise ReviewUpdateError(
+                f"Invalid severity: {severity} (must be low, medium, or high)",
+                "invalid severity",
+            )
+        updates.append("severity = %s")
+        params.append(severity)
+
+    if issue_type is not UNSET:
+        updates.append("issue_type = %s")
+        params.append(issue_type if issue_type else None)
+
+    if metadata is not UNSET:
+        if metadata is None or metadata == "":
+            updates.append("metadata = NULL")
+        else:
+            updates.append("metadata = %s")
+            params.append(
+                metadata if isinstance(metadata, str) else json.dumps(metadata)
+            )
+
+    if clear_scope:
+        updates.append("scope = NULL")
+        updates.append("scope_id = NULL")
+    elif scope is not UNSET:
+        if scope is not None and scope not in VALID_SCOPES:
+            raise ReviewUpdateError(
+                f"Invalid scope: {scope} (must be one of: {', '.join(sorted(VALID_SCOPES))})",
+                "invalid scope",
+            )
+        updates.append("scope = %s")
+        params.append(scope)
+        if scope_id is not UNSET:
+            updates.append("scope_id = %s")
+            params.append(scope_id)
+        elif scope != current_scope:
+            raise ReviewUpdateError(
+                "scope_id required when changing scope",
+                "scope_id required when changing scope",
+            )
+
+    if not updates:
+        raise ReviewUpdateError("Nothing to change. Provide at least one field.")
+
+    params.append(review_id)
+    cur.execute(
+        f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
+        params,
+    )
+
 
 def _resolve_scope_id(cur, scope: str, selector: str) -> str:
     """Resolve a scope_id selector using the appropriate resolver."""
@@ -223,56 +320,32 @@ def register(app: typer.Typer) -> None:
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                rid, desc, current_scope, current_scope_id = _resolve_review(cur, selector)
+                rid, desc, current_scope, _ = _resolve_review(cur, selector)
 
-                updates: list[str] = []
-                params: list = []
-
+                fields: dict = {}
                 if description is not None:
-                    if not description.strip():
-                        print("Description cannot be empty")
-                        sys.exit(1)
-                    updates.append("description = %s")
-                    params.append(description)
-
+                    fields["description"] = description
                 if severity is not None:
-                    updates.append("severity = %s")
-                    params.append(severity)
-
+                    fields["severity"] = severity
                 if type is not None:
-                    updates.append("issue_type = %s")
-                    params.append(type if type else None)
-
+                    fields["issue_type"] = type if type else None
                 if metadata is not None:
-                    if parsed_metadata == "":
-                        updates.append("metadata = NULL")
-                    else:
-                        updates.append("metadata = %s")
-                        params.append(json.dumps(parsed_metadata))
-
+                    fields["metadata"] = None if parsed_metadata == "" else parsed_metadata
                 if clear_scope:
-                    updates.append("scope = NULL")
-                    updates.append("scope_id = NULL")
+                    fields["clear_scope"] = True
                 elif scope is not None:
-                    updates.append("scope = %s")
-                    params.append(scope)
+                    fields["scope"] = scope
                     if scope_id:
-                        resolved_scope_id = _resolve_scope_id(cur, scope, scope_id)
-                        updates.append("scope_id = %s")
-                        params.append(resolved_scope_id)
+                        fields["scope_id"] = _resolve_scope_id(cur, scope, scope_id)
                     elif scope != current_scope:
                         print("--scope-id required when changing scope")
                         sys.exit(1)
 
-                if not updates:
-                    print("Nothing to change. Provide at least one field.")
+                try:
+                    apply_review_update(cur, rid, **fields)
+                except ReviewUpdateError as e:
+                    print(str(e))
                     sys.exit(1)
-
-                params.append(rid)
-                cur.execute(
-                    f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
-                    params,
-                )
                 db.conn.commit()
         except RuntimeError as e:
             print(str(e))

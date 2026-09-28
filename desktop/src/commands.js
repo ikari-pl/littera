@@ -89,4 +89,27 @@ export const commands = [
     shortcut: null,
     action: (ctx) => ctx.handlers.onOpenInflectDialog(),
   },
+
+  // Export (same io.py path as CLI)
+  {
+    id: "export-json",
+    label: "Export JSON",
+    category: "Export",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onExportJSON(),
+  },
+  {
+    id: "export-markdown",
+    label: "Export Markdown",
+    category: "Export",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onExportMarkdown(false),
+  },
+  {
+    id: "export-compile",
+    label: "Compile manuscript (Markdown)",
+    category: "Export",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onExportMarkdown(true),
+  },
 ];

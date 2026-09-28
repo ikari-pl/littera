@@ -19,6 +19,14 @@
   padding: 0 1;
 }
 
+#word-count-bar {
+  dock: bottom;
+  height: 1;
+  background: $primary-darken-2;
+  color: $text-muted;
+  padding: 0 1;
+}
+
 #detail {
   padding: 1;
 }

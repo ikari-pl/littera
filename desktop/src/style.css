@@ -101,11 +101,22 @@ body {
   justify-content: space-between;
 }
 
+#sidebar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
 #sidebar-header h1 {
   font-size: 1.1rem;
   font-weight: 500;
   color: var(--accent);
   letter-spacing: 0.05em;
+}
+
+#word-count {
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 #sidebar-header-actions {

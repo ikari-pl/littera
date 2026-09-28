@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 
+from littera.cli.words import count_scope
 from littera.db.workdb import open_work_db
 
 
@@ -31,12 +32,14 @@ def register(app):
                 blk_count = cur.fetchone()[0]
                 cur.execute("SELECT COUNT(*) FROM entities")
                 ent_count = cur.fetchone()[0]
+                words = count_scope(db.conn)["words"]
 
                 print("\nContent:")
                 print(f"  • Documents: {doc_count}")
                 print(f"  • Sections:  {sec_count}")
                 print(f"  • Blocks:    {blk_count}")
                 print(f"  • Entities:  {ent_count}")
+                print(f"  • Words:     {words}")
         except RuntimeError as e:
             print(str(e))
             sys.exit(1)

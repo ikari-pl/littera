@@ -32,6 +32,7 @@ export function render(state, handlers) {
   renderCommandPalette(state, handlers);
   renderInflectDialog(state, handlers);
   renderThemeToggle(state, handlers);
+  renderWordCount(state);
 
   // Bind switch-work button
   const switchBtn = document.getElementById("switch-work-btn");
@@ -224,7 +225,10 @@ function ensureAppLayout() {
   app.innerHTML = `
     <aside id="sidebar">
       <div id="sidebar-header">
-        <h1>Littera</h1>
+        <div id="sidebar-title">
+          <h1>Littera</h1>
+          <div id="word-count"></div>
+        </div>
         <div id="sidebar-header-actions">
           <button id="switch-work-btn" title="Switch work">\u21c4</button>
           <button id="theme-toggle">auto</button>
@@ -279,6 +283,18 @@ function renderBreadcrumb(state, handlers) {
     }
     el.appendChild(crumb);
   }
+}
+
+function renderWordCount(state) {
+  const el = document.getElementById("word-count");
+  if (!el) return;
+  if (!state.wordCount) {
+    el.textContent = "";
+    return;
+  }
+  const words = Number(state.wordCount.words || 0).toLocaleString();
+  const scope = state.wordCount.scope || "work";
+  el.textContent = `${words} words (${scope})`;
 }
 
 // ---------------------------------------------------------------------------

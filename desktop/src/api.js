@@ -69,6 +69,14 @@ export function fetchStatus(port) {
   return get(port, "/api/status");
 }
 
+export function fetchWordCount(port, { documentId, sectionId } = {}) {
+  const params = new URLSearchParams();
+  if (documentId) params.set("document_id", documentId);
+  if (sectionId) params.set("section_id", sectionId);
+  const qs = params.toString();
+  return get(port, qs ? `/api/wc?${qs}` : "/api/wc");
+}
+
 export function saveBlock(port, blockId, sourceText) {
   return put(port, `/api/blocks/${blockId}`, { source_text: sourceText });
 }
@@ -196,8 +204,9 @@ export function exportJSON(port) {
   return get(port, "/api/export/json");
 }
 
-export function exportMarkdown(port) {
-  return get(port, "/api/export/markdown");
+export function exportMarkdown(port, { compile = false } = {}) {
+  const path = compile ? "/api/export/markdown?compile=1" : "/api/export/markdown";
+  return get(port, path);
 }
 
 export function importJSON(port, data) {

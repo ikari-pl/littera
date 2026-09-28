@@ -15,6 +15,59 @@ import typer
 
 from littera.db.workdb import open_work_db
 
+# Sibling lists (docs/sections/blocks) and the global block walk share one clause.
+SIBLING_ORDER_SQL = "order_index NULLS LAST, created_at"
+GLOBAL_BLOCK_ORDER_SQL = (
+    "d.order_index NULLS LAST, d.created_at, d.id, "
+    "s.order_index NULLS LAST, s.created_at, s.id, "
+    "b.order_index NULLS LAST, b.created_at, b.id"
+)
+
+_SIBLING_PARENT = {
+    "documents": "work_id",
+    "sections": "document_id",
+    "blocks": "section_id",
+}
+
+
+def reorder_siblings(cur, table: str, item_id: str, new_position: int) -> tuple[bool, int]:
+    """Move an item among its siblings and rewrite order_index.
+
+    ``table`` must be documents, sections, or blocks. Returns
+    ``(True, count)`` on success, or ``(False, count)`` if the position is
+    out of range. Count is 0 when the item is missing. Does not commit.
+    """
+    parent_col = _SIBLING_PARENT.get(table)
+    if parent_col is None:
+        return False, 0
+    cur.execute(
+        f"SELECT id FROM {table} "
+        f"WHERE {parent_col} = (SELECT {parent_col} FROM {table} WHERE id = %s) "
+        f"ORDER BY {SIBLING_ORDER_SQL}",
+        (item_id,),
+    )
+    ids = [str(r[0]) for r in cur.fetchall()]
+    item_id = str(item_id)
+    if item_id not in ids:
+        return False, 0
+    if new_position < 1 or new_position > len(ids):
+        return False, len(ids)
+    ids.remove(item_id)
+    ids.insert(new_position - 1, item_id)
+    cur.executemany(
+        f"UPDATE {table} SET order_index = %s WHERE id = %s",
+        [(idx, row_id) for idx, row_id in enumerate(ids, 1)],
+    )
+    return True, len(ids)
+
+
+def _looks_like_uuid(selector: str) -> bool:
+    try:
+        uuid.UUID(selector)
+        return True
+    except ValueError:
+        return False
+
 
 def _resolve_section_global(cur, selector: str) -> tuple[str, str]:
     """Resolve a section selector across all documents.
@@ -61,7 +114,7 @@ def _resolve_section_global(cur, selector: str) -> tuple[str, str]:
 def _resolve_block_in_section(cur, section_id: str, selector: str) -> tuple[str, str, str]:
     """Resolve a block selector scoped to a specific section."""
     cur.execute(
-        "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
+        f"SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
         (section_id,),
     )
     rows = cur.fetchall()
@@ -83,15 +136,26 @@ def _resolve_block_in_section(cur, section_id: str, selector: str) -> tuple[str,
 
 
 def _resolve_block_global(cur, selector: str) -> tuple[str, str, str]:
-    """Resolve a block by UUID only (global, for edit/delete)."""
-    # Index-based: resolve across all blocks (ordered by document/section/creation)
+    """Resolve a block by UUID or global 1-based index (for edit/delete/move)."""
+    if _looks_like_uuid(selector):
+        cur.execute(
+            "SELECT id, language, source_text FROM blocks WHERE id = %s",
+            (selector,),
+        )
+        row = cur.fetchone()
+        if row:
+            return row
+        print(f"Block not found: {selector}")
+        sys.exit(1)
+
+    # Index-based: resolve across all blocks (ordered by document/section/block)
     cur.execute(
-        """
+        f"""
         SELECT b.id, b.language, b.source_text
         FROM blocks b
         JOIN sections s ON s.id = b.section_id
         JOIN documents d ON d.id = s.document_id
-        ORDER BY d.order_index NULLS LAST, d.created_at, s.order_index NULLS LAST, b.order_index NULLS LAST, b.created_at
+        ORDER BY {GLOBAL_BLOCK_ORDER_SQL}
         """
     )
     rows = cur.fetchall()
@@ -149,7 +213,7 @@ def register(app: typer.Typer):
                 cur = db.conn.cursor()
                 sec_id, sec_title = _resolve_section_global(cur, section)
                 cur.execute(
-                    "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
+                    f"SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                     (sec_id,),
                 )
                 rows = cur.fetchall()
@@ -261,27 +325,10 @@ def register(app: typer.Typer):
             with open_work_db() as db:
                 cur = db.conn.cursor()
                 block_id, lang, text = _resolve_block_global(cur, block)
-
-                cur.execute(
-                    "SELECT id FROM blocks "
-                    "WHERE section_id = (SELECT section_id FROM blocks WHERE id = %s) "
-                    "ORDER BY order_index NULLS LAST, created_at",
-                    (block_id,),
-                )
-                ids = [str(r[0]) for r in cur.fetchall()]
-
-                if position < 1 or position > len(ids):
-                    print(f"Position must be between 1 and {len(ids)}")
+                ok, count = reorder_siblings(cur, "blocks", str(block_id), position)
+                if not ok:
+                    print(f"Position must be between 1 and {count}")
                     sys.exit(1)
-
-                ids.remove(str(block_id))
-                ids.insert(position - 1, str(block_id))
-
-                for idx, bid in enumerate(ids, 1):
-                    cur.execute(
-                        "UPDATE blocks SET order_index = %s WHERE id = %s",
-                        (idx, bid),
-                    )
                 db.conn.commit()
         except RuntimeError as e:
             print(str(e))

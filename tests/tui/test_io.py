@@ -9,15 +9,46 @@ import uuid
 
 import pytest
 
-from littera.tui import actions
+from littera.tui import actions, queries
 from littera.tui.app import LitteraApp
+from littera.tui.state import EditTarget, StartEdit
 
 
 def test_app_has_io_bindings():
     keys = {binding[0] for binding in LitteraApp.BINDINGS}
     assert "x" in keys
     assert "X" in keys
+    assert "C" in keys
     assert "i" in keys
+
+
+def test_busy_editing_blocks_export_import(tui_state, seeded_ids):
+    """x / X / i must not open a path prompt while a block edit is open."""
+    lang, text = queries.fetch_block_text(tui_state.db, seeded_ids["blk1_id"])
+    assert lang
+    tui_state.dispatch(
+        StartEdit(
+            target=EditTarget(kind="block_text", id=seeded_ids["blk1_id"]),
+            text=text,
+            return_to="outline",
+        )
+    )
+    assert tui_state.view == "editor"
+
+    app = LitteraApp()
+    app.state = tui_state
+    notified: list[str] = []
+    pushed: list = []
+    app.notify = lambda message, **kwargs: notified.append(message)
+    app.push_screen = lambda *args, **kwargs: pushed.append(args)
+
+    app.action_export_json()
+    app.action_export_markdown()
+    app.action_export_compile()
+    app.action_import_json()
+
+    assert pushed == []
+    assert notified.count("Save or cancel the edit first") == 4
 
 
 def test_export_json_contains_seeded_work(tui_state, tmp_path):
@@ -40,6 +71,20 @@ def test_export_markdown_contains_titles(tui_state, tmp_path):
     text = dest.read_text(encoding="utf-8")
     assert "Document One" in text
     assert "Introduction" in text
+    assert "This is the first block" in text
+    assert "## Document:" in text
+    assert "[en]" in text
+
+
+def test_export_compile_is_chapter_joined(tui_state, tmp_path):
+    dest = tmp_path / "manuscript.md"
+    written = actions.export_markdown_to_path(tui_state.db, str(dest), compile=True)
+    assert written == dest
+
+    text = dest.read_text(encoding="utf-8")
+    assert "Document One" in text
+    assert "## Document:" not in text
+    assert "[en]" not in text
     assert "This is the first block" in text
 
 

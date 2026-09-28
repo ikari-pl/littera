@@ -8,6 +8,8 @@ Usage in app.py:
     queries.refresh_entities(state)  # before EntitiesView.render()
 """
 
+from littera.cli.block import SIBLING_ORDER_SQL
+from littera.cli.words import count_scope
 from littera.tui.state import AppState, OutlineItem, EntityItem, AlignmentItem, ReviewItem
 
 
@@ -26,21 +28,21 @@ def refresh_outline(state: AppState) -> None:
     with state.db.cursor() as cur:
         if not state.path:
             # Documents level
-            cur.execute("SELECT id, title FROM documents ORDER BY order_index NULLS LAST, created_at")
+            cur.execute(f"SELECT id, title FROM documents ORDER BY {SIBLING_ORDER_SQL}")
             for doc_id, title in cur.fetchall():
                 items.append(OutlineItem(id=str(doc_id), kind="document", title=title))
         else:
             last = state.path[-1]
             if last.kind == "document":
                 cur.execute(
-                    "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index NULLS LAST, created_at",
+                    f"SELECT id, title FROM sections WHERE document_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                     (last.id,),
                 )
                 for sec_id, title in cur.fetchall():
                     items.append(OutlineItem(id=str(sec_id), kind="section", title=title))
             elif last.kind == "section":
                 cur.execute(
-                    "SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
+                    f"SELECT id, language, source_text FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                     (last.id,),
                 )
                 for block_id, lang, text in cur.fetchall():
@@ -52,13 +54,13 @@ def refresh_outline(state: AppState) -> None:
         # Detail for selected item
         sel = state.entity_selection
         if sel and sel.id:
-            detail = _outline_detail(cur, sel)
+            detail = _outline_detail(cur, sel, state.db)
 
     state.outline.items = items
     state.outline.detail = detail
 
 
-def _outline_detail(cur, sel) -> str:
+def _outline_detail(cur, sel, conn) -> str:
     """Build detail string for the selected outline item."""
     raw_id = sel.id
 
@@ -71,7 +73,11 @@ def _outline_detail(cur, sel) -> str:
             (raw_id,),
         )
         sec_count = cur.fetchone()[0]
-        return f"Document: {title}\nSections: {sec_count}\n\nEnter: drill down"
+        words = count_scope(conn, document_id=raw_id)["words"]
+        return (
+            f"Document: {title}\nSections: {sec_count}\nWords: {words}\n\n"
+            "Enter: drill down"
+        )
 
     elif sel.kind == "section":
         cur.execute("SELECT title FROM sections WHERE id = %s", (raw_id,))
@@ -82,7 +88,11 @@ def _outline_detail(cur, sel) -> str:
             (raw_id,),
         )
         block_count = cur.fetchone()[0]
-        return f"Section: {title}\nBlocks: {block_count}\n\nEnter: drill down"
+        words = count_scope(conn, section_id=raw_id)["words"]
+        return (
+            f"Section: {title}\nBlocks: {block_count}\nWords: {words}\n\n"
+            "Enter: drill down"
+        )
 
     elif sel.kind == "block":
         cur.execute(

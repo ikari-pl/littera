@@ -16,7 +16,9 @@ import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
+from littera.cli.block import SIBLING_ORDER_SQL, reorder_siblings
 from littera.db.workdb import open_work_db, WorkDb
 
 
@@ -68,6 +70,7 @@ ROUTES = [
     (re.compile(r"^/api/export/markdown$"), "GET", "_get_export_markdown"),
     (re.compile(r"^/api/import/json$"), "POST", "_post_import_json"),
     (re.compile(r"^/api/status$"), "GET", "_get_status"),
+    (re.compile(r"^/api/wc$"), "GET", "_get_wc"),
     (re.compile(r"^/health$"), "GET", "_health"),
 ]
 
@@ -97,8 +100,11 @@ class SidecarHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _dispatch(self, method):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        self.query = {k: v[-1] for k, v in parse_qs(parsed.query).items()}
         for pattern, route_method, handler_name in ROUTES:
-            m = pattern.match(self.path)
+            m = pattern.match(path)
             if m and route_method == method:
                 handler = getattr(self, handler_name)
                 self._json_response(handler(*m.groups()))
@@ -112,14 +118,14 @@ class SidecarHandler(BaseHTTPRequestHandler):
     def _get_documents(self):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, title FROM documents ORDER BY order_index NULLS LAST, created_at"
+                f"SELECT id, title FROM documents ORDER BY {SIBLING_ORDER_SQL}"
             )
             return [{"id": str(r[0]), "title": r[1]} for r in cur.fetchall()]
 
     def _get_sections(self, document_id: str):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, title FROM sections WHERE document_id = %s ORDER BY order_index NULLS LAST, created_at",
+                f"SELECT id, title FROM sections WHERE document_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                 (document_id,),
             )
             return [{"id": str(r[0]), "title": r[1]} for r in cur.fetchall()]
@@ -127,7 +133,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
     def _get_blocks(self, section_id: str):
         with self.work_db.conn.cursor() as cur:
             cur.execute(
-                "SELECT id, block_type, language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
+                f"SELECT id, block_type, language, source_text FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                 (section_id,),
             )
             return [
@@ -248,7 +254,8 @@ class SidecarHandler(BaseHTTPRequestHandler):
     def _get_export_markdown(self):
         from littera.cli.io import export_work_markdown
 
-        text = export_work_markdown(self.work_db.conn)
+        compile_flag = self.query.get("compile", "") in ("1", "true", "yes")
+        text = export_work_markdown(self.work_db.conn, compile=compile_flag)
         return {"markdown": text}
 
     def _post_import_json(self):
@@ -262,9 +269,29 @@ class SidecarHandler(BaseHTTPRequestHandler):
         return {"ok": True, "counts": counts}
 
     def _get_status(self):
+        from littera.cli.words import count_scope
+
         cfg = self.work_db.cfg
         work_title = cfg.get("work", {}).get("title", "Untitled")
-        return {"work_title": work_title, "pg_status": "running"}
+        stats = count_scope(self.work_db.conn)
+        return {
+            "work_title": work_title,
+            "pg_status": "running",
+            "word_count": stats["words"],
+            "block_count": stats["blocks"],
+            "words": stats["words"],
+            "blocks": stats["blocks"],
+        }
+
+    def _get_wc(self):
+        from littera.cli.words import count_scope
+
+        stats = count_scope(
+            self.work_db.conn,
+            document_id=self.query.get("document_id") or None,
+            section_id=self.query.get("section_id") or None,
+        )
+        return stats
 
     def _health(self):
         return {"status": "ok"}
@@ -308,28 +335,11 @@ class SidecarHandler(BaseHTTPRequestHandler):
             return {"error": "position (integer) required"}
         conn = self.work_db.conn
         with conn.cursor() as cur:
-            # Get all sibling documents in current order
-            cur.execute(
-                "SELECT id FROM documents "
-                "WHERE work_id = (SELECT work_id FROM documents WHERE id = %s) "
-                "ORDER BY order_index NULLS LAST, created_at",
-                (document_id,),
-            )
-            ids = [str(r[0]) for r in cur.fetchall()]
-
-            if str(document_id) not in ids:
-                return {"error": "document not found"}
-            if position < 1 or position > len(ids):
-                return {"error": f"position must be between 1 and {len(ids)}"}
-
-            ids.remove(str(document_id))
-            ids.insert(position - 1, str(document_id))
-
-            for idx, did in enumerate(ids, 1):
-                cur.execute(
-                    "UPDATE documents SET order_index = %s WHERE id = %s",
-                    (idx, did),
-                )
+            ok, count = reorder_siblings(cur, "documents", document_id, position)
+            if not ok:
+                if count == 0:
+                    return {"error": "document not found"}
+                return {"error": f"position must be between 1 and {count}"}
         conn.commit()
         return {"ok": True}
 
@@ -340,27 +350,11 @@ class SidecarHandler(BaseHTTPRequestHandler):
             return {"error": "position (integer) required"}
         conn = self.work_db.conn
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM blocks "
-                "WHERE section_id = (SELECT section_id FROM blocks WHERE id = %s) "
-                "ORDER BY order_index NULLS LAST, created_at",
-                (block_id,),
-            )
-            ids = [str(r[0]) for r in cur.fetchall()]
-
-            if str(block_id) not in ids:
-                return {"error": "block not found"}
-            if position < 1 or position > len(ids):
-                return {"error": f"position must be between 1 and {len(ids)}"}
-
-            ids.remove(str(block_id))
-            ids.insert(position - 1, str(block_id))
-
-            for idx, bid in enumerate(ids, 1):
-                cur.execute(
-                    "UPDATE blocks SET order_index = %s WHERE id = %s",
-                    (idx, bid),
-                )
+            ok, count = reorder_siblings(cur, "blocks", block_id, position)
+            if not ok:
+                if count == 0:
+                    return {"error": "block not found"}
+                return {"error": f"position must be between 1 and {count}"}
         conn.commit()
         return {"ok": True}
 
@@ -371,28 +365,11 @@ class SidecarHandler(BaseHTTPRequestHandler):
             return {"error": "position (integer) required"}
         conn = self.work_db.conn
         with conn.cursor() as cur:
-            # Get all sibling sections in current order
-            cur.execute(
-                "SELECT id FROM sections "
-                "WHERE document_id = (SELECT document_id FROM sections WHERE id = %s) "
-                "ORDER BY order_index NULLS LAST, created_at",
-                (section_id,),
-            )
-            ids = [str(r[0]) for r in cur.fetchall()]
-
-            if str(section_id) not in ids:
-                return {"error": "section not found"}
-            if position < 1 or position > len(ids):
-                return {"error": f"position must be between 1 and {len(ids)}"}
-
-            ids.remove(str(section_id))
-            ids.insert(position - 1, str(section_id))
-
-            for idx, sid in enumerate(ids, 1):
-                cur.execute(
-                    "UPDATE sections SET order_index = %s WHERE id = %s",
-                    (idx, sid),
-                )
+            ok, count = reorder_siblings(cur, "sections", section_id, position)
+            if not ok:
+                if count == 0:
+                    return {"error": "section not found"}
+                return {"error": f"position must be between 1 and {count}"}
         conn.commit()
         return {"ok": True}
 
@@ -874,39 +851,17 @@ class SidecarHandler(BaseHTTPRequestHandler):
         allowed = ("description", "severity", "scope", "scope_id", "issue_type")
         if not any(k in body for k in allowed):
             return {"error": "no fields to update"}
-        severity = body.get("severity")
-        if severity is not None and severity not in ("low", "medium", "high"):
-            return {"error": "invalid severity"}
-        description = body.get("description")
-        if description is not None and not str(description).strip():
-            return {"error": "description cannot be empty"}
-        from littera.cli.review import VALID_SCOPES
+        from littera.cli.review import ReviewUpdateError, apply_review_update
 
-        if "scope" in body and body["scope"] is not None and body["scope"] not in VALID_SCOPES:
-            return {"error": "invalid scope"}
+        fields = {k: body[k] for k in allowed if k in body}
         conn = self.work_db.conn
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, scope FROM reviews WHERE id = %s", (review_id,))
-            row = cur.fetchone()
-            if row is None:
-                return {"error": "review not found"}
-            current_scope = row[1]
-            if "scope" in body and body["scope"] != current_scope:
-                if not body.get("scope_id"):
-                    return {"error": "scope_id required when changing scope"}
-            updates = []
-            params = []
-            for col in allowed:
-                if col not in body:
-                    continue
-                updates.append(f"{col} = %s")
-                params.append(body[col])
-            params.append(review_id)
-            cur.execute(
-                f"UPDATE reviews SET {', '.join(updates)} WHERE id = %s",
-                params,
-            )
-        conn.commit()
+        try:
+            with conn.cursor() as cur:
+                apply_review_update(cur, review_id, **fields)
+            conn.commit()
+        except ReviewUpdateError as e:
+            conn.rollback()
+            return {"error": e.http_error}
         return {"ok": True}
 
     def _delete_review(self, review_id: str):

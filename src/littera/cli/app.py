@@ -98,6 +98,7 @@ from littera.cli import io as io_cmd
 
 io_cmd.register_export(export_app)
 io_cmd.register_import(import_app)
+io_cmd.register_snapshot(app)
 
 
 # =============================================================================
@@ -106,11 +107,13 @@ io_cmd.register_import(import_app)
 
 from littera.cli import init as init_cmd
 from littera.cli import status as status_cmd
+from littera.cli import words as words_cmd
 from littera.cli import mntn_db as mntn_db_cmd
 from littera.cli import inflect as inflect_cmd
 
 init_cmd.register(app)
 status_cmd.register(app)
+words_cmd.register(app)
 mntn_db_cmd.register(app)
 inflect_cmd.register(app)
 

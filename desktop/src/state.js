@@ -40,6 +40,7 @@ export const initialState = {
   alignmentGaps: null,     // { gaps, total, checked } or null
   inflectDialogOpen: false, // inflect word modal
   inflectResult: null,     // result string from inflect API
+  wordCount: null,         // { words, blocks, scope } from saved source_text
 };
 
 export function reduce(state, action) {
@@ -216,6 +217,9 @@ export function reduce(state, action) {
 
     case "set-inflect-result":
       return { ...state, inflectResult: action.result };
+
+    case "set-word-count":
+      return { ...state, wordCount: action.wordCount };
 
     case "return-to-picker":
       return {

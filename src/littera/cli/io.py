@@ -7,6 +7,7 @@ Markdown export is read-only, for human consumption.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Optional
 
 import typer
 
+from littera.cli.block import SIBLING_ORDER_SQL
 from littera.db.workdb import open_work_db
 
 
@@ -36,11 +38,12 @@ def export_work_json(conn) -> dict:
 
     # Documents with sections and blocks
     cur.execute(
-        "SELECT id, title FROM documents WHERE work_id = %s ORDER BY order_index, created_at",
+        "SELECT id, title, order_index FROM documents WHERE work_id = %s "
+        f"ORDER BY {SIBLING_ORDER_SQL}",
         (work_id,),
     )
     documents = []
-    for doc_id, doc_title in cur.fetchall():
+    for doc_id, doc_title, doc_order in cur.fetchall():
         cur.execute(
             "SELECT id, title, order_index FROM sections WHERE document_id = %s ORDER BY order_index",
             (doc_id,),
@@ -49,7 +52,7 @@ def export_work_json(conn) -> dict:
         for sec_id, sec_title, order_idx in cur.fetchall():
             cur.execute(
                 "SELECT id, block_type, language, source_text, order_index "
-                "FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
+                f"FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                 (sec_id,),
             )
             blocks = [
@@ -74,6 +77,7 @@ def export_work_json(conn) -> dict:
             {
                 "id": str(doc_id),
                 "title": doc_title,
+                "order_index": doc_order,
                 "sections": sections,
             }
         )
@@ -159,8 +163,15 @@ def export_work_json(conn) -> dict:
     }
 
 
-def export_work_markdown(conn) -> str:
-    """Build a Markdown representation of the work."""
+def export_work_markdown(conn, compile: bool = False) -> str:
+    """Build a Markdown representation of the work.
+
+    Default is a labeled dump (Document: prefixes, [lang] tags).
+    ``compile=True`` joins chapters as a manuscript: no language tags,
+    mention markup reduced to visible labels.
+    """
+    from littera.cli.words import visible_text
+
     cur = conn.cursor()
 
     cur.execute("SELECT id, title FROM works LIMIT 1")
@@ -176,7 +187,10 @@ def export_work_markdown(conn) -> str:
         (work_id,),
     )
     for doc_id, doc_title in cur.fetchall():
-        lines.append(f"## Document: {doc_title or 'Untitled'}")
+        if compile:
+            lines.append(f"## {doc_title or 'Untitled'}")
+        else:
+            lines.append(f"## Document: {doc_title or 'Untitled'}")
         lines.append("")
 
         cur.execute(
@@ -188,12 +202,18 @@ def export_work_markdown(conn) -> str:
             lines.append("")
 
             cur.execute(
-                "SELECT language, source_text FROM blocks WHERE section_id = %s ORDER BY order_index NULLS LAST, created_at",
+                f"SELECT language, source_text FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                 (sec_id,),
             )
             for lang, text in cur.fetchall():
-                lines.append(f"[{lang}] {text}")
-                lines.append("")
+                if compile:
+                    body = visible_text(text).strip()
+                    if body:
+                        lines.append(body)
+                        lines.append("")
+                else:
+                    lines.append(f"[{lang}] {text}")
+                    lines.append("")
 
     return "\n".join(lines)
 
@@ -277,29 +297,36 @@ def import_work_json(conn, data: dict) -> dict:
 
     # --- Documents, Sections, Blocks ---
     block_id_map: dict[str, str] = {}  # old_id -> new_id
-    for doc in work_data.get("documents", []):
+    for doc_idx, doc in enumerate(work_data.get("documents", []), 1):
         doc_old_id = doc.get("id")
         doc_new_id = doc_old_id or str(uuid.uuid4())
         # Handle UUID collision
         cur.execute("SELECT id FROM documents WHERE id = %s", (doc_new_id,))
         if cur.fetchone():
             doc_new_id = str(uuid.uuid4())
+        doc_order = doc.get("order_index")
+        if doc_order is None:
+            doc_order = doc_idx
         cur.execute(
-            "INSERT INTO documents (id, work_id, title) VALUES (%s, %s, %s)",
-            (doc_new_id, work_id, doc.get("title")),
+            "INSERT INTO documents (id, work_id, title, order_index) "
+            "VALUES (%s, %s, %s, %s)",
+            (doc_new_id, work_id, doc.get("title"), doc_order),
         )
         counts["documents"] += 1
 
-        for sec in doc.get("sections", []):
+        for sec_idx, sec in enumerate(doc.get("sections", []), 1):
             sec_old_id = sec.get("id")
             sec_new_id = sec_old_id or str(uuid.uuid4())
             cur.execute("SELECT id FROM sections WHERE id = %s", (sec_new_id,))
             if cur.fetchone():
                 sec_new_id = str(uuid.uuid4())
+            sec_order = sec.get("order_index")
+            if sec_order is None:
+                sec_order = sec_idx
             cur.execute(
                 "INSERT INTO sections (id, document_id, title, order_index) "
                 "VALUES (%s, %s, %s, %s)",
-                (sec_new_id, doc_new_id, sec.get("title"), sec.get("order_index")),
+                (sec_new_id, doc_new_id, sec.get("title"), sec_order),
             )
             counts["sections"] += 1
 
@@ -411,11 +438,16 @@ def register_export(app: typer.Typer) -> None:
     @app.command("markdown")
     def export_markdown(
         output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+        compile: bool = typer.Option(
+            False,
+            "--compile",
+            help="Chapter-joined manuscript (no Document: / [lang] prefixes)",
+        ),
     ) -> None:
         """Export the work as Markdown."""
         try:
             with open_work_db() as db:
-                text = export_work_markdown(db.conn)
+                text = export_work_markdown(db.conn, compile=compile)
         except RuntimeError as e:
             print(str(e))
             sys.exit(1)
@@ -456,3 +488,45 @@ def register_import(app: typer.Typer) -> None:
         parts = [f"{v} {k}" for k, v in counts.items() if v > 0]
         summary = ", ".join(parts) if parts else "nothing"
         print(f"Imported: {summary}")
+
+
+def write_snapshot(work_dir: Path, conn, name: Optional[str] = None) -> Path:
+    """Write a timestamped JSON export under .littera/snapshots/. Explicit only."""
+    from datetime import datetime
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    slug = ""
+    if name:
+        slug = "-" + re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
+    dest_dir = work_dir / ".littera" / "snapshots"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{stamp}{slug}.json"
+    suffix = 2
+    while dest.exists():
+        dest = dest_dir / f"{stamp}{slug}-{suffix}.json"
+        suffix += 1
+    dest.write_text(
+        json.dumps(export_work_json(conn), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return dest
+
+
+def register_snapshot(app: typer.Typer) -> None:
+    """Register the explicit snapshot command."""
+
+    @app.command("snapshot")
+    def snapshot(
+        name: Optional[str] = typer.Option(
+            None, "--name", "-n", help="Optional label appended to the timestamp"
+        ),
+    ) -> None:
+        """Write a timestamped JSON export into .littera/snapshots/."""
+        try:
+            with open_work_db() as db:
+                dest = write_snapshot(db.work_dir, db.conn, name)
+        except RuntimeError as e:
+            print(str(e))
+            sys.exit(1)
+
+        print(f"Snapshot written to {dest}")

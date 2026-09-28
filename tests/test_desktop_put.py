@@ -212,3 +212,43 @@ def test_put_block_order_out_of_range_rejected(tmp_path):
         assert res.returncode == 0, res.stderr
         assert "[1] (en) Only" in res.stdout
         assert "[2] (en) Also" in res.stdout
+
+
+def get_json(base: str, path: str) -> dict:
+    with urlopen(f"{base}{path}") as resp:
+        return json.loads(resp.read().decode())
+
+
+def test_status_and_wc_count_saved_words(tmp_path):
+    with init_work(tmp_path) as workdir:
+        add_document(workdir, "Ch")
+        add_section(workdir)
+        add_block(workdir, "one two three")
+
+        with open_work_db(workdir) as db:
+            with sidecar(db) as base:
+                status = get_json(base, "/api/status")
+                assert status["word_count"] == 3
+                assert status["words"] == 3
+                assert status["blocks"] == 1
+                wc = get_json(base, "/api/wc")
+                assert wc["words"] == 3
+                assert wc["blocks"] == 1
+
+
+def test_export_markdown_compile_query(tmp_path):
+    with init_work(tmp_path) as workdir:
+        add_document(workdir, "Ch")
+        add_section(workdir, "S")
+        add_block(workdir, "Hello world")
+
+        with open_work_db(workdir) as db:
+            with sidecar(db) as base:
+                labeled = get_json(base, "/api/export/markdown")
+                compiled = get_json(base, "/api/export/markdown?compile=1")
+        assert "## Document: Ch" in labeled["markdown"]
+        assert "[en] Hello world" in labeled["markdown"]
+        assert "## Document:" not in compiled["markdown"]
+        assert "[en]" not in compiled["markdown"]
+        assert "## Ch" in compiled["markdown"]
+        assert "Hello world" in compiled["markdown"]

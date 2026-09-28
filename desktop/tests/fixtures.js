@@ -162,7 +162,13 @@ function routeHandler(route, request) {
 
   // GET /api/status
   if (method === "GET" && path === "/api/status") {
-    return route.fulfill({ json: { status: "ok" } });
+    return route.fulfill({
+      json: { status: "ok", work_title: "Mock", pg_status: "running", word_count: 0, block_count: 0 },
+    });
+  }
+
+  if (method === "GET" && path === "/api/wc") {
+    return route.fulfill({ json: { words: 0, blocks: 0 } });
   }
 
   // GET /api/reviews

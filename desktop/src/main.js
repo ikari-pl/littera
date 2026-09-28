@@ -636,6 +636,29 @@ const handlers = {
       store.dispatch({ type: "error", message: err.message });
     }
   },
+
+  async onExportJSON() {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    try {
+      const data = await api.exportJSON(port);
+      downloadText("export.json", JSON.stringify(data, null, 2), "application/json");
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
+  async onExportMarkdown(compile) {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    try {
+      const data = await api.exportMarkdown(port, { compile });
+      const name = compile ? "manuscript.md" : "export.md";
+      downloadText(name, data.markdown || "", "text/markdown");
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -650,12 +673,47 @@ function currentLevel(state) {
   return "documents";
 }
 
+function downloadText(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function refreshWordCount() {
+  const state = store.getState();
+  const port = state.sidecarPort;
+  if (!port) return;
+  let documentId = null;
+  let sectionId = null;
+  let scope = "work";
+  for (const elem of state.path) {
+    if (elem.kind === "document") {
+      documentId = elem.id;
+      scope = "document";
+    } else if (elem.kind === "section") {
+      sectionId = elem.id;
+      scope = "section";
+    }
+  }
+  try {
+    const stats = await api.fetchWordCount(port, { documentId, sectionId });
+    store.dispatch({ type: "set-word-count", wordCount: { ...stats, scope } });
+  } catch {
+    // Word count is chrome, not a blocking load.
+  }
+}
+
 async function loadLevel() {
   const state = store.getState();
   const port = state.sidecarPort;
   if (!port) return;
 
   store.dispatch({ type: "loading" });
+  refreshWordCount();
 
   try {
     if (state.path.length === 0) {
@@ -874,6 +932,7 @@ document.addEventListener("keydown", async (e) => {
       }
 
       store.dispatch({ type: "editor-mark-saved", doc: currentDoc });
+      refreshWordCount();
 
       // Refresh sidebar previews from the saved doc
       const items = [];
