@@ -38,3 +38,20 @@ scripts/polimorf.tab
 
 # Test work directory
 my-work/
+
+# Beads local DB / backups (tracked issues live in issues.jsonl)
+.beads/backup/
+.beads/embeddeddolt/
+.beads/.auto-import-issues.jsonl
+
+# Agent / tooling local state
+.claude/
+.cursor/
+.omc/
+.skillshare/
+.playwright-mcp/
+.envrc
+
+# Ad-hoc UI screenshots and Playwright output
+*.png
+desktop/test-results/
