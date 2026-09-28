@@ -3,10 +3,18 @@
  *
  * Each command: { id, label, shortcut, category, action }
  * action is a function that receives (ctx) where ctx = { store, handlers, api }.
- * Commands with action: null are handled by existing keydown listeners.
  */
 
 export const commands = [
+  // Help
+  {
+    id: "show-help",
+    label: "Show help & shortcuts",
+    category: "Help",
+    shortcut: "Cmd+/",
+    action: (ctx) => ctx.handlers.onShowHelp(),
+  },
+
   // Navigation
   {
     id: "nav-work-root",
@@ -16,6 +24,13 @@ export const commands = [
     action: (ctx) => ctx.handlers.onBreadcrumbClick(0),
   },
   {
+    id: "nav-outline",
+    label: "Switch to Outline view",
+    category: "Navigation",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onTabClick("outline"),
+  },
+  {
     id: "nav-entities",
     label: "Switch to Entities view",
     category: "Navigation",
@@ -23,11 +38,18 @@ export const commands = [
     action: (ctx) => ctx.handlers.onTabClick("entities"),
   },
   {
-    id: "nav-outline",
-    label: "Switch to Outline view",
+    id: "nav-alignments",
+    label: "Switch to Alignments view",
     category: "Navigation",
     shortcut: null,
-    action: (ctx) => ctx.handlers.onTabClick("outline"),
+    action: (ctx) => ctx.handlers.onTabClick("alignments"),
+  },
+  {
+    id: "nav-reviews",
+    label: "Switch to Reviews view",
+    category: "Navigation",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onTabClick("reviews"),
   },
   {
     id: "nav-switch-work",
@@ -43,7 +65,7 @@ export const commands = [
     label: "Save",
     category: "Editor",
     shortcut: "Cmd+S",
-    action: null, // handled by existing keydown
+    action: (ctx) => ctx.handlers.onSave(),
   },
   {
     id: "editor-zen",
@@ -52,16 +74,23 @@ export const commands = [
     shortcut: "Cmd+Shift+F",
     action: (ctx) => {
       const state = ctx.store.getState();
-      if (state.editing) ctx.store.dispatch({ type: "toggle-zen" });
+      if (state.editing) {
+        const entering = !state.zenMode;
+        ctx.store.dispatch({ type: "toggle-zen" });
+        if (entering && ctx.handlers.onZenEntered) {
+          ctx.handlers.onZenEntered();
+        }
+      }
     },
   },
 
-  // Structure
+  // Structure — labels are level-aware via dynamicLabel when filtered
   {
     id: "add-document",
     label: "Add document",
     category: "Structure",
     shortcut: null,
+    when: (state) => !state.editing && state.view === "outline" && state.path.length === 0,
     action: (ctx) => ctx.handlers.onAddItem(),
   },
   {
@@ -69,6 +98,11 @@ export const commands = [
     label: "Add section",
     category: "Structure",
     shortcut: null,
+    when: (state) =>
+      !state.editing &&
+      state.view === "outline" &&
+      state.path.length > 0 &&
+      state.path[state.path.length - 1].kind === "document",
     action: (ctx) => ctx.handlers.onAddItem(),
   },
 
@@ -81,6 +115,22 @@ export const commands = [
     action: (ctx) => ctx.handlers.onAddEntity(),
   },
 
+  // Alignments / Reviews
+  {
+    id: "add-alignment",
+    label: "Add alignment",
+    category: "Semantics",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onAddAlignment(),
+  },
+  {
+    id: "add-review",
+    label: "Add review",
+    category: "Semantics",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onAddReview(),
+  },
+
   // Linguistics
   {
     id: "inflect-word",
@@ -90,7 +140,7 @@ export const commands = [
     action: (ctx) => ctx.handlers.onOpenInflectDialog(),
   },
 
-  // Export (same io.py path as CLI)
+  // Export / Import
   {
     id: "export-json",
     label: "Export JSON",
@@ -112,4 +162,22 @@ export const commands = [
     shortcut: null,
     action: (ctx) => ctx.handlers.onExportMarkdown(true),
   },
+  {
+    id: "import-json",
+    label: "Import JSON…",
+    category: "Export",
+    shortcut: null,
+    action: (ctx) => ctx.handlers.onImportJSON(),
+  },
 ];
+
+/** Filter commands by query; respect optional when(state) predicates. */
+export function visibleCommands(state, query = "") {
+  const q = query.toLowerCase().trim();
+  return commands.filter((c) => {
+    if (typeof c.action !== "function") return false;
+    if (typeof c.when === "function" && !c.when(state)) return false;
+    if (!q) return true;
+    return c.label.toLowerCase().includes(q);
+  });
+}

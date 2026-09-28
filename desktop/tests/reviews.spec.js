@@ -9,6 +9,14 @@ test.beforeEach(async ({ page }) => {
   await setupPage(page);
 });
 
+async function fillAppPrompt(page, value) {
+  const dialog = page.locator(".app-dialog").last();
+  await dialog.waitFor({ state: "visible" });
+  const input = dialog.locator(".app-dialog-input");
+  await input.fill(value);
+  await dialog.locator('[data-act="ok"]').click();
+}
+
 test("edit review from Reviews panel sends PUT", async ({ page }) => {
   await gotoApp(page);
 
@@ -22,23 +30,15 @@ test("edit review from Reviews panel sends PUT", async ({ page }) => {
     await route.fallback();
   });
 
-  page.on("dialog", async (dialog) => {
-    const message = dialog.message();
-    if (message.includes("description")) {
-      await dialog.accept("Stronger thesis");
-    } else if (message.includes("Severity")) {
-      await dialog.accept("high");
-    } else {
-      await dialog.dismiss();
-    }
-  });
-
   await page.locator("#tab-reviews").click();
   await page.locator(".review-row").first().waitFor({ state: "visible" });
   await expect(page.locator(".review-description")).toContainText(
     "Needs a stronger opening",
   );
   await page.locator(".review-edit-btn").click();
+
+  await fillAppPrompt(page, "Stronger thesis");
+  await fillAppPrompt(page, "high");
 
   await expect.poll(() => putBody).not.toBeNull();
   expect(putBody).toEqual({

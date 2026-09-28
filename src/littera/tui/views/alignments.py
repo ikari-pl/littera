@@ -10,7 +10,7 @@ class AlignmentsView(View):
 
     def render(self, state: AppState):
         """Pure render from state.alignments.items and state.alignments.detail."""
-        hints = "d:delete  g:gaps  o:outline  e:entities  Esc:back"
+        hints = "a:add  d:delete  g:gaps  o:outline  e:entities  Esc:back"
 
         items = []
         for alignment_item in state.alignments.items:

@@ -90,16 +90,16 @@ The TUI makes large works legible without hiding their structure.
 
 ---
 
-### Desktop App — Immersive Writing (Planned)
+### Desktop App — Immersive Writing
 
-The desktop application is a core goal, not an afterthought.
+The desktop application is a core interface, not an afterthought.
 
 It is intended to be:
-- WYSIWYG‑leaning
+- WYSIWYG-leaning
 - calm and immersive
 - largely free of visible metadata
 
-Structure and semantics persist invisibly beneath the surface. Writers should be able to enter flow without managing machinery.
+Structure and semantics persist invisibly beneath the surface. Writers should be able to enter flow without managing machinery. When you forget how it works, Help (`Cmd+/`) restores the model without leaving the app.
 
 The desktop app is where Littera becomes transformative rather than merely powerful.
 

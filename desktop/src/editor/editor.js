@@ -86,6 +86,7 @@ function createBlockAfter(state, dispatch) {
 
 // ---------------------------------------------------------------------------
 // promptLink command — Cmd+K toggles link mark or shows URL input
+// (Command palette uses Cmd+Shift+P so it does not steal this binding.)
 // ---------------------------------------------------------------------------
 
 function promptLink(state, dispatch, view) {

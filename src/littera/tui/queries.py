@@ -413,6 +413,29 @@ def fetch_item_title(db, kind: str, item_id: str) -> str:
 # Alignments
 # =============================================================================
 
+def list_blocks_for_picker(db) -> list[tuple[str, str]]:
+    """Return [(block_id, label), ...] for alignment pickers."""
+    from littera.cli.block import GLOBAL_BLOCK_ORDER_SQL
+
+    with db.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT b.id, b.language, b.source_text, d.title, s.title
+            FROM blocks b
+            JOIN sections s ON s.id = b.section_id
+            JOIN documents d ON d.id = s.document_id
+            ORDER BY {GLOBAL_BLOCK_ORDER_SQL}
+            """
+        )
+        rows = cur.fetchall()
+    options: list[tuple[str, str]] = []
+    for bid, lang, text, doc_title, sec_title in rows:
+        preview = (text or "").replace("\n", " ")[:50] or "(empty)"
+        label = f"{doc_title or '?'} › {sec_title or '?'}: [{lang}] {preview}"
+        options.append((str(bid), label))
+    return options
+
+
 def refresh_alignments(state: AppState) -> None:
     """Populate state.alignments.items from DB."""
     items: list[AlignmentItem] = []

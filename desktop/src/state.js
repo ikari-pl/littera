@@ -35,7 +35,7 @@ export const initialState = {
   // Entity label add mode
   addingLabel: false,
   addingProperty: false,
-  commandPaletteOpen: false, // Cmd+K command palette
+  commandPaletteOpen: false, // Cmd+Shift+P command palette
   theme: null,             // null = system, "light", "dark"
   alignmentGaps: null,     // { gaps, total, checked } or null
   inflectDialogOpen: false, // inflect word modal

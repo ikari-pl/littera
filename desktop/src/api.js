@@ -174,6 +174,10 @@ export function fetchAlignments(port) {
   return get(port, "/api/alignments");
 }
 
+export function fetchBlocks(port) {
+  return get(port, "/api/blocks");
+}
+
 export function createAlignment(port, sourceBlockId, targetBlockId, type) {
   return post(port, "/api/alignments", {
     source_block_id: sourceBlockId,

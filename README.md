@@ -79,6 +79,32 @@ Littera's core is stable and all three interfaces have near‑complete feature p
 
 ---
 
+## Quick Start
+
+```
+git clone <repo-url> littera
+cd littera
+uv venv
+uv pip install -e .
+
+littera init my-novel
+cd my-novel
+
+littera doc add "Chapter One"
+littera section add 1 "Opening"
+littera block add 1 "It was a dark and stormy night." --lang en
+littera doc list
+
+littera tui          # structure-first navigation
+# or open the desktop app from desktop/
+```
+
+Forgot the model? In the TUI press `?`. In the desktop app press `Cmd+/` or click **?**.
+
+Full setup notes (Postgres binaries, Tauri, tests): **`DEVELOPMENT.md`**.
+
+---
+
 ## Philosophy
 
 The full philosophy, design principles, and long‑term guarantees of Littera are documented in:

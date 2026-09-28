@@ -10,12 +10,26 @@ Both singular and plural forms work identically.
 
 import typer
 
-app = typer.Typer(add_completion=False, help="Littera — structure meets writing")
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Littera — structure meets writing",
+    epilog=(
+        "Common commands:\n"
+        "  littera init my-novel\n"
+        "  littera doc add \"Chapter One\"\n"
+        "  littera section add 1 \"Opening\"\n"
+        "  littera block add 1 \"First sentence.\" --lang en\n"
+        "  littera tui\n"
+        "\n"
+        "Run 'littera COMMAND --help' for details."
+    ),
+)
 
 
 @app.callback()
 def main():
-    """Littera CLI."""
+    """Work → Document → Section → Block. CLI is the source of truth."""
     pass
 
 

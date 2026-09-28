@@ -10,6 +10,7 @@
 import { initialState, reduce, createStore } from "./state.js";
 import { render } from "./render.js";
 import * as api from "./api.js";
+import { showPrompt, showConfirm, showHelp, showToast, showPicker } from "./dialog.js";
 import {
   createEditor,
   loadSection,
@@ -119,10 +120,13 @@ let pendingBlocks = null; // blocks to load once editor container is ready
 // Dirty navigation guard
 // ---------------------------------------------------------------------------
 
-function checkDirtyBeforeNav() {
+async function checkDirtyBeforeNav() {
   const state = store.getState();
   if (state.editing && state.dirty) {
-    return window.confirm("You have unsaved changes. Discard them?");
+    return showConfirm({
+      title: "Unsaved changes",
+      message: "You have unsaved changes. Discard them?",
+    });
   }
   return true;
 }
@@ -221,7 +225,7 @@ const handlers = {
 
   async onSwitchWork() {
     // Check for unsaved changes
-    if (!checkDirtyBeforeNav()) return;
+    if (!(await checkDirtyBeforeNav())) return;
 
     // Close editor if active
     const state = store.getState();
@@ -265,11 +269,11 @@ const handlers = {
     saveThemePreference(next);
   },
 
-  onItemClick(item) {
+  async onItemClick(item) {
     const state = store.getState();
 
     if (state.view === "entities") {
-      if (!checkDirtyBeforeNav()) return;
+      if (!(await checkDirtyBeforeNav())) return;
       store.dispatch({ type: "select-entity", id: item.id });
       loadEntityDetail(item.id);
       return;
@@ -278,11 +282,11 @@ const handlers = {
     const level = currentLevel(state);
 
     if (level === "documents") {
-      if (!checkDirtyBeforeNav()) return;
+      if (!(await checkDirtyBeforeNav())) return;
       store.dispatch({ type: "push", element: { kind: "document", id: item.id, title: item.title } });
       loadLevel();
     } else if (level === "sections") {
-      if (!checkDirtyBeforeNav()) return;
+      if (!(await checkDirtyBeforeNav())) return;
       store.dispatch({ type: "push", element: { kind: "section", id: item.id, title: item.title } });
       loadLevel();
     } else if (level === "blocks") {
@@ -290,8 +294,8 @@ const handlers = {
     }
   },
 
-  onBreadcrumbClick(depth) {
-    if (!checkDirtyBeforeNav()) return;
+  async onBreadcrumbClick(depth) {
+    if (!(await checkDirtyBeforeNav())) return;
     // If viewing entities, switch back to outline before navigating
     const state = store.getState();
     if (state.view === "entities") {
@@ -301,8 +305,8 @@ const handlers = {
     loadLevel();
   },
 
-  onTabClick(view) {
-    if (!checkDirtyBeforeNav()) return;
+  async onTabClick(view) {
+    if (!(await checkDirtyBeforeNav())) return;
     const state = store.getState();
     if (state.editing) {
       store.dispatch({ type: "editor-close" });
@@ -354,7 +358,7 @@ const handlers = {
     const level = currentLevel(state);
 
     if (level === "documents") {
-      const title = window.prompt("Document title:");
+      const title = await showPrompt({ title: "New document", placeholder: "Document title" });
       if (!title) return;
       try {
         await api.createDocument(port, title);
@@ -364,7 +368,7 @@ const handlers = {
       }
     } else if (level === "sections") {
       const last = state.path[state.path.length - 1];
-      const title = window.prompt("Section title:");
+      const title = await showPrompt({ title: "New section", placeholder: "Section title" });
       if (!title) return;
       try {
         await api.createSection(port, last.id, title);
@@ -382,7 +386,11 @@ const handlers = {
 
     const level = currentLevel(state);
     const label = item.title || "(untitled)";
-    if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) return;
+    const ok = await showConfirm({
+      title: "Delete",
+      message: `Delete "${label}"? This cannot be undone.`,
+    });
+    if (!ok) return;
 
     try {
       if (level === "documents") {
@@ -403,9 +411,14 @@ const handlers = {
     const port = state.sidecarPort;
     if (!port) return;
 
-    const entityType = window.prompt("Entity type (e.g. concept):", "concept");
+    const entityType = await showPrompt({
+      title: "New entity",
+      message: "Entity type",
+      defaultValue: "concept",
+      placeholder: "e.g. concept, person, place",
+    });
     if (!entityType) return;
-    const label = window.prompt("Entity name:");
+    const label = await showPrompt({ title: "New entity", placeholder: "Entity name" });
     if (!label) return;
 
     try {
@@ -421,7 +434,11 @@ const handlers = {
     const port = state.sidecarPort;
     if (!port) return;
 
-    if (!window.confirm(`Delete entity "${entity.label}"? This cannot be undone.`)) return;
+    const ok = await showConfirm({
+      title: "Delete entity",
+      message: `Delete entity "${entity.label}"? This cannot be undone.`,
+    });
+    if (!ok) return;
 
     try {
       await api.deleteEntity(port, entity.id);
@@ -438,7 +455,12 @@ const handlers = {
     const port = state.sidecarPort;
     if (!port) return;
 
-    if (!window.confirm("Delete this mention? The text in the block will remain but the entity link will be removed.")) return;
+    const ok = await showConfirm({
+      title: "Delete mention",
+      message:
+        "Delete this mention? The text in the block will remain but the entity link will be removed.",
+    });
+    if (!ok) return;
 
     try {
       await api.deleteMention(port, mention.id);
@@ -515,7 +537,11 @@ const handlers = {
     if (!port) return;
 
     const current = state.entityDetail?.note || "";
-    const note = window.prompt("Entity note:", current);
+    const note = await showPrompt({
+      title: "Entity note",
+      defaultValue: current,
+      placeholder: "Work-scoped note",
+    });
     if (note === null) return;
 
     try {
@@ -526,9 +552,53 @@ const handlers = {
     }
   },
 
+  async onAddAlignment() {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    try {
+      const blocks = await api.fetchBlocks(port);
+      const options = (blocks || []).map((b) => ({
+        id: b.id,
+        label: `${b.document} \u203a ${b.section}: [${b.language}] ${b.preview || "(empty)"}`,
+      }));
+      const sourceId = await showPicker({
+        title: "Align — source block",
+        options,
+        emptyText: "No blocks yet. Add writing first.",
+      });
+      if (!sourceId) return;
+      const targetOptions = options.filter((o) => o.id !== sourceId);
+      const targetId = await showPicker({
+        title: "Align — target block",
+        options: targetOptions,
+        emptyText: "Need at least two blocks to align.",
+      });
+      if (!targetId) return;
+      const type =
+        (await showPrompt({
+          title: "Alignment type",
+          defaultValue: "translation",
+          placeholder: "translation / adaptation / summary",
+        })) || "translation";
+      const result = await api.createAlignment(port, sourceId, targetId, type);
+      if (result && result.error) {
+        store.dispatch({ type: "error", message: result.error });
+        return;
+      }
+      await loadAlignments();
+    } catch (err) {
+      store.dispatch({ type: "error", message: err.message });
+    }
+  },
+
   async onDeleteAlignment(alignmentId) {
     const port = store.getState().sidecarPort;
     if (!port) return;
+    const ok = await showConfirm({
+      title: "Delete alignment",
+      message: "Delete this alignment? This cannot be undone.",
+    });
+    if (!ok) return;
     try {
       await api.deleteAlignment(port, alignmentId);
       await loadAlignments();
@@ -587,10 +657,17 @@ const handlers = {
   async onAddReview() {
     const port = store.getState().sidecarPort;
     if (!port) return;
-    const description = window.prompt("Review description:");
+    const description = await showPrompt({
+      title: "New review",
+      placeholder: "What needs attention?",
+    });
     if (!description) return;
-    const severity = window.prompt("Severity (low/medium/high):", "medium");
-    if (!severity) return;
+    const severity =
+      (await showPrompt({
+        title: "Severity",
+        defaultValue: "medium",
+        placeholder: "low / medium / high",
+      })) || "medium";
     try {
       await api.createReview(port, description, { severity });
       await loadReviews();
@@ -603,16 +680,18 @@ const handlers = {
     const port = store.getState().sidecarPort;
     if (!port) return;
     const current = store.getState().reviews.find((r) => r.id === reviewId);
-    const description = window.prompt(
-      "Review description:",
-      current ? current.description : "",
-    );
+    const description = await showPrompt({
+      title: "Edit review",
+      defaultValue: current ? current.description : "",
+      placeholder: "Description",
+    });
     if (!description) return;
-    const severity = window.prompt(
-      "Severity (low/medium/high):",
-      current ? current.severity || "medium" : "medium",
-    );
-    if (!severity) return;
+    const severity =
+      (await showPrompt({
+        title: "Severity",
+        defaultValue: current ? current.severity || "medium" : "medium",
+        placeholder: "low / medium / high",
+      })) || "medium";
     try {
       const result = await api.updateReview(port, reviewId, { description, severity });
       if (result && result.error) {
@@ -628,13 +707,56 @@ const handlers = {
   async onDeleteReview(reviewId) {
     const port = store.getState().sidecarPort;
     if (!port) return;
-    if (!window.confirm("Delete this review?")) return;
+    const ok = await showConfirm({
+      title: "Delete review",
+      message: "Delete this review?",
+    });
+    if (!ok) return;
     try {
       await api.deleteReview(port, reviewId);
       await loadReviews();
     } catch (err) {
       store.dispatch({ type: "error", message: err.message });
     }
+  },
+
+  onShowHelp() {
+    showHelp();
+  },
+
+  onZenEntered() {
+    showToast("Cmd+Shift+F to exit distraction-free mode");
+  },
+
+  async onImportJSON() {
+    const port = store.getState().sidecarPort;
+    if (!port) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.addEventListener("change", async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const ok = await showConfirm({
+          title: "Import JSON",
+          message: `Import "${file.name}" into this work? Existing data may be merged or overwritten depending on IDs.`,
+        });
+        if (!ok) return;
+        await api.importJSON(port, data);
+        showToast("Import complete");
+        await loadLevel();
+      } catch (err) {
+        store.dispatch({ type: "error", message: err.message || String(err) });
+      }
+    });
+    input.click();
+  },
+
+  async onSave() {
+    await performSave();
   },
 
   async onExportJSON() {
@@ -870,8 +992,8 @@ window.addEventListener("beforeunload", (e) => {
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", async (e) => {
-  // Cmd+K: toggle command palette
-  if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+  // Cmd+Shift+P: toggle command palette (Cmd+K stays for editor link)
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "p") {
     e.preventDefault();
     const state = store.getState();
     if (state.phase === "ready") {
@@ -882,79 +1004,113 @@ document.addEventListener("keydown", async (e) => {
     return;
   }
 
+  // Cmd+/ or bare "?" (when not typing): show help
+  const helpChord = (e.metaKey || e.ctrlKey) && e.key === "/";
+  const helpQuestion =
+    e.key === "?" &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.altKey &&
+    !isTypingTarget(e.target);
+  if (helpChord || helpQuestion) {
+    e.preventDefault();
+    e.stopPropagation();
+    const open = document.querySelector(".help-dialog-backdrop");
+    if (open) {
+      open.remove();
+    } else if (store.getState().phase === "ready") {
+      showHelp();
+    }
+    return;
+  }
+
   // Cmd+Shift+F: toggle zen mode (only while editing)
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f") {
     e.preventDefault();
     const state = store.getState();
     if (state.editing) {
+      const entering = !state.zenMode;
       store.dispatch({ type: "toggle-zen" });
+      if (entering) {
+        showToast("Cmd+Shift+F to exit distraction-free mode");
+      }
     }
     return;
   }
 
   if ((e.metaKey || e.ctrlKey) && e.key === "s") {
     e.preventDefault();
-
-    const state = store.getState();
-    if (!state.editing || !state.dirty || !editorView) return;
-
-    const port = state.sidecarPort;
-    const savedDoc = state.savedDoc;
-    const currentDoc = editorView.state.doc;
-
-    try {
-      if (!savedDoc) {
-        // First save — treat all blocks as batch update
-        await saveAllBlocks(port, currentDoc, state.editorSectionId);
-      } else {
-        const { updates, creates, deletes } = findDirtyBlocks(savedDoc, currentDoc);
-
-        if (updates.length > 0) {
-          const batch = updates.map((u) => ({
-            id: u.id,
-            source_text: blockNodeToMarkdown(u.node),
-          }));
-          await api.saveBlocksBatch(port, batch);
-        }
-
-        for (const c of creates) {
-          await api.createBlock(port, state.editorSectionId, {
-            id: c.id,
-            block_type: c.node.attrs.block_type,
-            language: c.node.attrs.language,
-            source_text: blockNodeToMarkdown(c.node),
-          });
-        }
-
-        for (const d of deletes) {
-          await api.deleteBlock(port, d.id);
-        }
-      }
-
-      store.dispatch({ type: "editor-mark-saved", doc: currentDoc });
-      refreshWordCount();
-
-      // Refresh sidebar previews from the saved doc
-      const items = [];
-      currentDoc.forEach((blockNode) => {
-        const md = blockNodeToMarkdown(blockNode);
-        items.push({
-          id: blockNode.attrs.id,
-          block_type: blockNode.attrs.block_type,
-          language: blockNode.attrs.language,
-          source_text: md,
-          title: previewText(md),
-        });
-      });
-      store.dispatch({ type: "set-items", items });
-    } catch (err) {
-      const errMsg = isTransientError(err)
-        ? "Save failed \u2014 connection lost. Try again with Cmd+S."
-        : `Save failed: ${err.message}`;
-      store.dispatch({ type: "error", message: errMsg });
-    }
+    await performSave();
   }
 });
+
+function isTypingTarget(el) {
+  if (!el || el === document.body) return false;
+  const tag = (el.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  if (el.isContentEditable) return true;
+  if (el.closest && el.closest(".ProseMirror")) return true;
+  return false;
+}
+
+async function performSave() {
+  const state = store.getState();
+  if (!state.editing || !state.dirty || !editorView) return;
+
+  const port = state.sidecarPort;
+  const savedDoc = state.savedDoc;
+  const currentDoc = editorView.state.doc;
+
+  try {
+    if (!savedDoc) {
+      await saveAllBlocks(port, currentDoc, state.editorSectionId);
+    } else {
+      const { updates, creates, deletes } = findDirtyBlocks(savedDoc, currentDoc);
+
+      if (updates.length > 0) {
+        const batch = updates.map((u) => ({
+          id: u.id,
+          source_text: blockNodeToMarkdown(u.node),
+        }));
+        await api.saveBlocksBatch(port, batch);
+      }
+
+      for (const c of creates) {
+        await api.createBlock(port, state.editorSectionId, {
+          id: c.id,
+          block_type: c.node.attrs.block_type,
+          language: c.node.attrs.language,
+          source_text: blockNodeToMarkdown(c.node),
+        });
+      }
+
+      for (const d of deletes) {
+        await api.deleteBlock(port, d.id);
+      }
+    }
+
+    store.dispatch({ type: "editor-mark-saved", doc: currentDoc });
+    refreshWordCount();
+
+    const items = [];
+    currentDoc.forEach((blockNode) => {
+      const md = blockNodeToMarkdown(blockNode);
+      items.push({
+        id: blockNode.attrs.id,
+        block_type: blockNode.attrs.block_type,
+        language: blockNode.attrs.language,
+        source_text: md,
+        title: previewText(md),
+      });
+    });
+    store.dispatch({ type: "set-items", items });
+  } catch (err) {
+    const errMsg = isTransientError(err)
+      ? "Save failed \u2014 connection lost. Try again with Cmd+S."
+      : `Save failed: ${err.message}`;
+    store.dispatch({ type: "error", message: errMsg });
+  }
+}
 
 async function saveAllBlocks(port, doc, sectionId) {
   const batch = [];

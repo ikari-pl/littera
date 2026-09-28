@@ -5,7 +5,7 @@
  * No fetches, no side effects beyond DOM mutation.
  */
 
-import { commands } from "./commands.js";
+import { visibleCommands } from "./commands.js";
 
 // ---------------------------------------------------------------------------
 // Main render entry point — branches on phase
@@ -34,15 +34,20 @@ export function render(state, handlers) {
   renderThemeToggle(state, handlers);
   renderWordCount(state);
 
-  // Bind switch-work button
+  // Bind switch-work + help buttons
   const switchBtn = document.getElementById("switch-work-btn");
   if (switchBtn && handlers.onSwitchWork) {
     switchBtn.onclick = () => handlers.onSwitchWork();
   }
+  const helpBtn = document.getElementById("help-btn");
+  if (helpBtn && handlers.onShowHelp) {
+    helpBtn.onclick = () => handlers.onShowHelp();
+  }
 
-  // Zen mode: toggle class on #app to hide sidebar/chrome via CSS
+  // Zen mode + writing mode (hide Align/Reviews tabs while editing)
   const app = document.getElementById("app");
   app.classList.toggle("zen-mode", state.zenMode);
+  app.classList.toggle("writing-mode", !!state.editing);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +236,7 @@ function ensureAppLayout() {
         </div>
         <div id="sidebar-header-actions">
           <button id="switch-work-btn" title="Switch work">\u21c4</button>
+          <button id="help-btn" title="Help (Cmd+/)">?</button>
           <button id="theme-toggle">auto</button>
         </div>
       </div>
@@ -322,7 +328,21 @@ function renderSidebarActions(state, handlers) {
   el.innerHTML = "";
 
   if (state.view === "alignments" || state.view === "reviews") {
-    // No sidebar actions for alignment/review views
+    if (state.view === "alignments" && handlers.onAddAlignment) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "sidebar-action-btn";
+      addBtn.textContent = "+";
+      addBtn.title = "Add alignment";
+      addBtn.addEventListener("click", () => handlers.onAddAlignment());
+      el.appendChild(addBtn);
+    } else if (state.view === "reviews" && handlers.onAddReview) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "sidebar-action-btn";
+      addBtn.textContent = "+";
+      addBtn.title = "Add review";
+      addBtn.addEventListener("click", () => handlers.onAddReview());
+      el.appendChild(addBtn);
+    }
   } else if (state.view === "entities") {
     const addBtn = document.createElement("button");
     addBtn.className = "sidebar-action-btn";
@@ -364,7 +384,18 @@ function renderSidebar(state, handlers) {
   if (items.length === 0) {
     const li = document.createElement("li");
     li.className = "sidebar-empty";
-    li.textContent = state.view === "entities" ? "No entities" : "No items";
+    if (state.view === "entities") {
+      li.textContent = "No entities yet — click + to add a person, place, or concept";
+    } else {
+      const level = currentLevel(state);
+      if (level === "documents") {
+        li.textContent = "No documents yet — click + or Cmd+Shift+P \u2192 Add document";
+      } else if (level === "sections") {
+        li.textContent = "No sections yet — click + to add one";
+      } else {
+        li.textContent = "No items";
+      }
+    }
     el.appendChild(li);
     return;
   }
@@ -531,10 +562,19 @@ function renderContent(state, handlers) {
   // Default placeholder
   const level = currentLevel(state);
   let hint = "Select an item to view";
-  if (level === "documents") hint = "Select a document to browse its sections";
-  else if (level === "sections") hint = "Select a section to view its content";
+  if (level === "documents") {
+    hint =
+      state.items.length === 0
+        ? "No documents yet. Click + in the sidebar (or Cmd+Shift+P \u2192 Add document).\n\nWork \u2192 Document \u2192 Section \u2192 Block"
+        : "Select a document to browse its sections";
+  } else if (level === "sections") {
+    hint =
+      state.items.length === 0
+        ? "No sections yet. Click + to add a section, then open it to write."
+        : "Select a section to view its content";
+  }
 
-  el.innerHTML = `<div class="content-placeholder">${hint}</div>`;
+  el.innerHTML = `<div class="content-placeholder">${hint.replace(/\n/g, "<br>")}</div>`;
 }
 
 function renderDirtyIndicator(container, dirty) {
@@ -997,7 +1037,8 @@ function renderAlignmentList(el, state, handlers) {
   if (state.alignments.length === 0) {
     const empty = document.createElement("p");
     empty.className = "entity-note-empty";
-    empty.textContent = "No alignments yet. Create alignments via the CLI: littera alignment add <source> <target>";
+    empty.textContent =
+      "No alignments yet. An alignment links two blocks (e.g. a translation). Click + to create one.";
     el.appendChild(empty);
     return;
   }
@@ -1256,7 +1297,8 @@ function renderReviewList(el, state, handlers) {
   if (state.reviews.length === 0) {
     const empty = document.createElement("p");
     empty.className = "entity-note-empty";
-    empty.textContent = "No reviews yet.";
+    empty.textContent =
+      "No reviews yet. A review is a scoped note about quality or intent (severity: low/medium/high). Click + to add one.";
     el.appendChild(empty);
     return;
   }
@@ -1312,7 +1354,7 @@ function renderReviewList(el, state, handlers) {
 }
 
 // ---------------------------------------------------------------------------
-// Command Palette (Cmd+K)
+// Command Palette (Cmd+Shift+P)
 // ---------------------------------------------------------------------------
 
 /** Track palette state for keyboard navigation */
@@ -1323,12 +1365,8 @@ let paletteQuery = "";
  * Filter commands by query string, matching against label.
  * Returns commands grouped by category in display order.
  */
-function filterCommands(query) {
-  const q = query.toLowerCase().trim();
-  if (!q) return commands.filter((c) => c.action !== null);
-  return commands.filter(
-    (c) => c.action !== null && c.label.toLowerCase().includes(q)
-  );
+function filterCommands(query, state) {
+  return visibleCommands(state || {}, query);
 }
 
 function renderCommandPalette(state, handlers) {
@@ -1369,7 +1407,7 @@ function renderCommandPalette(state, handlers) {
   palette.appendChild(input);
 
   // Filtered command list
-  const filtered = filterCommands(paletteQuery);
+  const filtered = filterCommands(paletteQuery, state);
 
   // Clamp selected index
   if (paletteSelectedIndex >= filtered.length) {
@@ -1446,7 +1484,7 @@ function renderCommandPalette(state, handlers) {
   });
 
   input.addEventListener("keydown", (e) => {
-    const currentFiltered = filterCommands(paletteQuery);
+    const currentFiltered = filterCommands(paletteQuery, state);
 
     if (e.key === "Escape") {
       e.preventDefault();

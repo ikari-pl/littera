@@ -47,7 +47,13 @@ from littera.tui.views.entities import EntitiesView
 from littera.tui.views.editor import EditorView
 from littera.tui.views.outline import OutlineView
 from littera.tui.views.reviews import ReviewsView
-from littera.tui.views.input_dialog import InputDialog, ConfirmDialog, RecoveryDialog
+from littera.tui.views.input_dialog import (
+    InputDialog,
+    ConfirmDialog,
+    RecoveryDialog,
+    PickListDialog,
+    HelpDialog,
+)
 from littera.tui.decorators import safe_action
 from littera.tui import queries, actions
 
@@ -97,6 +103,7 @@ class LitteraApp(App):
         ("X", "export_markdown", "Export MD"),
         ("C", "export_compile", "Compile MD"),
         ("i", "import_json", "Import JSON"),
+        ("question_mark", "show_help", "Help"),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -838,11 +845,18 @@ class LitteraApp(App):
 
     @safe_action
     def _prompt_add_alignment(self) -> None:
-        """Chain dialogs to create an alignment: source block, target block, type."""
+        """Pick source/target blocks by preview, then alignment type."""
+        if self.state is None:
+            return
+        options = queries.list_blocks_for_picker(self.state.db)
+        if len(options) < 2:
+            self.notify("Need at least two blocks to create an alignment", severity="warning")
+            return
 
         async def on_src_result(src_id: str | None) -> None:
             if not src_id:
                 return
+            remaining = [(oid, label) for oid, label in options if oid != src_id]
 
             async def on_tgt_result(tgt_id: str | None) -> None:
                 if not tgt_id:
@@ -854,19 +868,28 @@ class LitteraApp(App):
                     self._create_alignment(src_id, tgt_id, atype)
 
                 self.push_screen(
-                    InputDialog("New Alignment", "Type (translation/adaptation/summary):", "translation"),
+                    InputDialog(
+                        "New Alignment",
+                        "Type (translation/adaptation/summary):",
+                        "translation",
+                    ),
                     on_type_result,
                 )
 
             self.push_screen(
-                InputDialog("New Alignment", "Target block ID:", ""),
+                PickListDialog("Align — target block", remaining),
                 on_tgt_result,
             )
 
         self.push_screen(
-            InputDialog("New Alignment", "Source block ID:", ""),
+            PickListDialog("Align — source block", options),
             on_src_result,
         )
+
+    @safe_action
+    def action_show_help(self) -> None:
+        """Show model + shortcut cheatsheet."""
+        self.push_screen(HelpDialog())
 
     @safe_action
     def _create_alignment(self, src_id: str, tgt_id: str, atype: str) -> None:

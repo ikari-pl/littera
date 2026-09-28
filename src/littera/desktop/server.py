@@ -18,7 +18,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from littera.cli.block import SIBLING_ORDER_SQL, reorder_siblings
+from littera.cli.block import GLOBAL_BLOCK_ORDER_SQL, SIBLING_ORDER_SQL, reorder_siblings
 from littera.db.workdb import open_work_db, WorkDb
 
 
@@ -38,6 +38,7 @@ ROUTES = [
     (re.compile(r"^/api/sections/([^/]+)$"), "PUT", "_put_section"),
     (re.compile(r"^/api/sections/([^/]+)$"), "DELETE", "_delete_section"),
     (re.compile(r"^/api/sections/([^/]+)/blocks$"), "GET", "_get_blocks"),
+    (re.compile(r"^/api/blocks$"), "GET", "_get_all_blocks"),
     (re.compile(r"^/api/blocks/batch$"), "PUT", "_put_blocks_batch"),
     (re.compile(r"^/api/blocks/([^/]+)$"), "GET", "_get_block"),
     (re.compile(r"^/api/blocks/([^/]+)/language$"), "PUT", "_put_block_language"),
@@ -138,6 +139,30 @@ class SidecarHandler(BaseHTTPRequestHandler):
             )
             return [
                 {"id": str(r[0]), "block_type": r[1], "language": r[2], "source_text": r[3]}
+                for r in cur.fetchall()
+            ]
+
+    def _get_all_blocks(self):
+        """All blocks with short previews — for alignment pickers."""
+        with self.work_db.conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT b.id, b.language, b.source_text,
+                       d.title, s.title
+                FROM blocks b
+                JOIN sections s ON s.id = b.section_id
+                JOIN documents d ON d.id = s.document_id
+                ORDER BY {GLOBAL_BLOCK_ORDER_SQL}
+                """
+            )
+            return [
+                {
+                    "id": str(r[0]),
+                    "language": r[1],
+                    "preview": (r[2] or "").replace("\n", " ")[:80],
+                    "document": r[3] or "(untitled)",
+                    "section": r[4] or "(untitled)",
+                }
                 for r in cur.fetchall()
             ]
 
