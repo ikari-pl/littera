@@ -11,13 +11,11 @@ import re
 import sys
 import uuid
 from pathlib import Path
-from typing import Optional
 
 import typer
 
 from littera.cli.block import SIBLING_ORDER_SQL
 from littera.db.workdb import open_work_db
-
 
 # =========================================================================
 # Shared export logic (used by CLI and desktop sidecar)
@@ -296,6 +294,23 @@ def import_work_json(conn, data: dict) -> dict:
                     counts["labels"] += 1
 
     # --- Documents, Sections, Blocks ---
+    # Import appends: existing documents keep the order the user already sees
+    # and imported ones land after them.  Existing rows may be numbered 1..n
+    # (the CLI renumbers on move) or carry NULL order_index (TUI-created, and
+    # NULLS LAST would push them behind the import), so freeze the current
+    # order as explicit indexes first and offset the import past it.
+    cur.execute(
+        f"SELECT id FROM documents WHERE work_id = %s ORDER BY {SIBLING_ORDER_SQL}",
+        (work_id,),
+    )
+    existing_doc_ids = [row[0] for row in cur.fetchall()]
+    if existing_doc_ids:
+        cur.executemany(
+            "UPDATE documents SET order_index = %s WHERE id = %s",
+            [(idx, doc_id) for idx, doc_id in enumerate(existing_doc_ids, 1)],
+        )
+    doc_order_offset = len(existing_doc_ids)
+
     block_id_map: dict[str, str] = {}  # old_id -> new_id
     for doc_idx, doc in enumerate(work_data.get("documents", []), 1):
         doc_old_id = doc.get("id")
@@ -307,6 +322,7 @@ def import_work_json(conn, data: dict) -> dict:
         doc_order = doc.get("order_index")
         if doc_order is None:
             doc_order = doc_idx
+        doc_order += doc_order_offset
         cur.execute(
             "INSERT INTO documents (id, work_id, title, order_index) "
             "VALUES (%s, %s, %s, %s)",
@@ -418,7 +434,7 @@ def register_export(app: typer.Typer) -> None:
 
     @app.command("json")
     def export_json(
-        output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+        output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
     ) -> None:
         """Export the entire work as JSON."""
         try:
@@ -437,7 +453,7 @@ def register_export(app: typer.Typer) -> None:
 
     @app.command("markdown")
     def export_markdown(
-        output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+        output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
         compile: bool = typer.Option(
             False,
             "--compile",
@@ -490,11 +506,11 @@ def register_import(app: typer.Typer) -> None:
         print(f"Imported: {summary}")
 
 
-def write_snapshot(work_dir: Path, conn, name: Optional[str] = None) -> Path:
+def write_snapshot(work_dir: Path, conn, name: str | None = None) -> Path:
     """Write a timestamped JSON export under .littera/snapshots/. Explicit only."""
     from datetime import datetime
 
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-%f")
     slug = ""
     if name:
         slug = "-" + re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
@@ -517,7 +533,7 @@ def register_snapshot(app: typer.Typer) -> None:
 
     @app.command("snapshot")
     def snapshot(
-        name: Optional[str] = typer.Option(
+        name: str | None = typer.Option(
             None, "--name", "-n", help="Optional label appended to the timestamp"
         ),
     ) -> None:

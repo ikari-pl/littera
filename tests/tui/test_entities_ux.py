@@ -4,9 +4,9 @@ Test for entities UX functionality from phase1b-tui.md.
 Verifies entities list, detail, and navigation against real Postgres.
 """
 
+from littera.tui.queries import refresh_entities
 from littera.tui.state import EntitiesSelect, GotoEntities
 from littera.tui.views.entities import EntitiesView
-from littera.tui.queries import refresh_entities
 
 
 class TestEntitiesUX:

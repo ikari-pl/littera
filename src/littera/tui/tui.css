@@ -13,7 +13,10 @@
 
 #hint-bar {
   dock: bottom;
-  height: 1;
+  /* The bar lists every key that works here, so let it wrap rather than
+     clipping keys the writer would then never find. */
+  height: auto;
+  max-height: 3;
   background: $surface;
   color: $text-muted;
   padding: 0 1;
@@ -34,28 +37,38 @@
 #dialog {
   width: 60;
   height: auto;
+  max-height: 90%;
   border: thick $primary;
   background: $surface;
   padding: 1 2;
 }
 
-ErrorScreen {
+#recovery-log {
+  height: auto;
+  max-height: 12;
+  overflow-y: auto;
+  background: $background;
+  margin: 1 0;
+}
+
+/* Every dialog is a ModalScreen; centre them instead of letting them render
+   at (0,0) on top of the list. The old rule named ErrorScreen, a class that
+   no longer exists, so nothing was centred at all. */
+ModalScreen {
     align: center middle;
 }
 
-#error-dialog {
-    width: 80%;
-    height: auto;
-    border: thick $error;
-    background: $surface;
-    padding: 1 2;
+/* The help list is longer than most terminals; give it a real scroll box
+   inside a fixed-height dialog. */
+HelpDialog #dialog {
+    height: 90%;
 }
 
-#error-traceback {
-    height: auto;
-    max-height: 20;
+#help-scroll {
+    height: 1fr;
     overflow-y: auto;
-    background: $background;
-    color: $text-muted;
-    margin: 1 0;
+}
+
+#help-body {
+    height: auto;
 }

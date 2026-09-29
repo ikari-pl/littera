@@ -54,7 +54,9 @@ def register(app: typer.Typer) -> None:
                     INSERT INTO entity_work_metadata (entity_id, work_id, metadata)
                     VALUES (%s, %s, %s::jsonb)
                     ON CONFLICT (entity_id, work_id)
-                    DO UPDATE SET metadata = EXCLUDED.metadata
+                    DO UPDATE SET metadata =
+                        COALESCE(entity_work_metadata.metadata, '{}'::jsonb)
+                        || EXCLUDED.metadata
                     """,
                     (entity_id, work_id, json.dumps({"note": note})),
                 )

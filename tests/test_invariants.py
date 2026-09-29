@@ -4,7 +4,6 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
-
 # --- helpers -------------------------------------------------
 
 
@@ -24,6 +23,7 @@ def run(cmd: str, cwd: Path) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         env={**os.environ, "PATH": os.environ.get("PATH", "")},
+        check=False,
     )
 
 
@@ -45,6 +45,7 @@ def _stop_postgres(workdir: Path) -> None:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     pid_file = data_dir / "postmaster.pid"
@@ -53,7 +54,7 @@ def _stop_postgres(workdir: Path) -> None:
 
     try:
         pid = int(pid_file.read_text().splitlines()[0])
-    except Exception:
+    except Exception:  # noqa: BLE001 - test teardown: never fail a run because cleanup raised
         return
 
     try:

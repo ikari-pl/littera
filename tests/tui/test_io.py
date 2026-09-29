@@ -22,6 +22,20 @@ def test_app_has_io_bindings():
     assert "i" in keys
 
 
+def test_every_binding_appears_in_the_help(tui_state):
+    """littera-s0j: help used to document 14 of 31 keys, by hand.
+
+    It is generated from the same list the footer uses, so adding a binding
+    without documenting it is no longer possible.
+    """
+    from littera.tui import keymap
+
+    text = keymap.help_text(tui_state)
+    for key, _action, description in LitteraApp.BINDINGS:
+        assert keymap.key_display(key) in text, f"{key} is undocumented"
+        assert description in text, f"{description} is undocumented"
+
+
 def test_busy_editing_blocks_export_import(tui_state, seeded_ids):
     """x / X / i must not open a path prompt while a block edit is open."""
     lang, text = queries.fetch_block_text(tui_state.db, seeded_ids["blk1_id"])

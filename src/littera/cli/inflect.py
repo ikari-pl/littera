@@ -6,8 +6,6 @@ Dispatches to the appropriate language module.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from littera.linguistics.dispatch import surface_form
@@ -20,16 +18,16 @@ def register(app: typer.Typer) -> None:
         lang: str = typer.Option("en", "--lang", help="Language code: 'en' or 'pl'"),
         plural: bool = typer.Option(False, "--plural", help="Pluralize"),
         possessive: bool = typer.Option(False, "--possessive", help="Add possessive (English only)"),
-        article: Optional[str] = typer.Option(
+        article: str | None = typer.Option(
             None, "--article", help="Article: 'a' or 'the' (English only)"
         ),
-        case: Optional[str] = typer.Option(
+        case: str | None = typer.Option(
             None, "--case", help="Case: 'plain'|'poss' (en) or 'nom'|'gen'|'dat'|'acc'|'inst'|'loc'|'voc' (pl)"
         ),
-        gender: Optional[str] = typer.Option(
+        gender: str | None = typer.Option(
             None, "--gender", help="Gender: 'm1'|'m2'|'m3'|'f'|'n' (Polish only)"
         ),
-        countable: Optional[str] = typer.Option(
+        countable: str | None = typer.Option(
             None, "--countable", help="Countability: 'yes' or 'no' (English only)"
         ),
     ) -> None:

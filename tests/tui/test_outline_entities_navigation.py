@@ -4,11 +4,10 @@ Test for navigation between outline and entities views.
 Verifies context preservation between views against real Postgres.
 """
 
-from littera.tui.state import OutlineSelect, GotoOutline
-from littera.tui.state import EntitiesSelect, GotoEntities
-from littera.tui.views.outline import OutlineView
+from littera.tui.queries import refresh_entities, refresh_outline
+from littera.tui.state import EntitiesSelect, GotoEntities, GotoOutline, OutlineSelect
 from littera.tui.views.entities import EntitiesView
-from littera.tui.queries import refresh_outline, refresh_entities
+from littera.tui.views.outline import OutlineView
 
 
 class TestOutlineEntitiesNavigation:

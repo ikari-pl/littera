@@ -4,15 +4,15 @@ Test for specific navigation UX requirements from phase1b-tui.md.
 Verifies outline navigation logic against a real embedded Postgres.
 """
 
+from littera.tui.queries import refresh_outline
 from littera.tui.state import (
     AppState,
-    PathElement,
-    OutlinePush,
-    OutlinePop,
-    OutlineSelect,
     OutlineClearSelection,
+    OutlinePop,
+    OutlinePush,
+    OutlineSelect,
+    PathElement,
 )
-from littera.tui.queries import refresh_outline
 
 
 class TestOutlineNavigation:

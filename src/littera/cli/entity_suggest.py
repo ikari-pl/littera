@@ -61,7 +61,7 @@ def register(app: typer.Typer) -> None:
                 sys.exit(1)
 
             print("No LLM backend configured. Set LITTERA_LLM_BACKEND to enable suggestions.")
-            print(f"  Add the label manually:")
+            print("  Add the label manually:")
             print(f"  littera entity label-add {canonical} {language} <base_form>")
             return
 
@@ -97,6 +97,6 @@ def register(app: typer.Typer) -> None:
             print(f'Suggested label for {etype} "{canonical}" in {language}: {suggestion}')
             print(f"  Apply: littera entity label-add {canonical} {language} {suggestion}")
         else:
-            print(f"LLM unavailable or returned no result.")
-            print(f"  Add the label manually:")
+            print("LLM unavailable or returned no result.")
+            print("  Add the label manually:")
             print(f"  littera entity label-add {canonical} {language} <base_form>")

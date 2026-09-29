@@ -4,8 +4,13 @@ Test for specific navigation UX requirements from phase1b-tui.md.
 This test verifies navigation state transitions work correctly.
 """
 
-import pytest
-from littera.tui.state import AppState, PathElement, OutlineSelect, OutlinePush, OutlinePop
+from littera.tui.state import (
+    AppState,
+    OutlinePop,
+    OutlinePush,
+    OutlineSelect,
+    PathElement,
+)
 
 
 def test_outline_navigation_state_transitions():

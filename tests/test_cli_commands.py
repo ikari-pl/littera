@@ -4,8 +4,7 @@ Covers: delete, section list, mention lifecycle, entity labels, mntn-db-*.
 Uses real embedded Postgres per MANIFESTO.
 """
 
-from tests.test_invariants import init_work, run, add_document, add_section, add_block
-
+from tests.test_invariants import add_block, add_document, add_section, init_work, run
 
 # ── Delete commands ──────────────────────────────────────────────
 

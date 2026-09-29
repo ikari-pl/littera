@@ -6,8 +6,8 @@ EditorView.render() doesn't query the DB, but we still provide a real
 connection to eliminate all Mock usage per MANIFESTO.
 """
 
+from littera.tui.state import EditTarget, StartEdit
 from littera.tui.views.editor import EditorView
-from littera.tui.state import EditSession, EditTarget, StartEdit
 
 
 class TestEditingFunctionality:

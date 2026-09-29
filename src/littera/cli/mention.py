@@ -3,12 +3,12 @@
 import json
 import sys
 import uuid
-from typing import Optional
 
 import typer
 
 from littera.cli.block import GLOBAL_BLOCK_ORDER_SQL
 from littera.db.workdb import open_work_db
+from littera.domain.guards import GuardViolation, ensure_entity_exists
 
 
 def _resolve_block(cur, selector: str) -> tuple[str, str]:
@@ -41,16 +41,12 @@ def _resolve_block(cur, selector: str) -> tuple[str, str]:
 
 
 def _resolve_entity(cur, entity_type: str, name: str) -> str:
-    """Resolve entity by type and name to id."""
-    cur.execute(
-        "SELECT id FROM entities WHERE entity_type = %s AND canonical_label = %s",
-        (entity_type, name),
-    )
-    row = cur.fetchone()
-    if row is None:
-        print(f"Entity not found: {entity_type} {name}")
-        sys.exit(1)
-    return row[0]
+    """Resolve entity by type and name to id.
+
+    The entity-must-exist rule is shared with the other interfaces; see
+    ``littera.domain.guards.ensure_entity_exists``.
+    """
+    return ensure_entity_exists(cur, entity_type, name)
 
 
 def _resolve_mention(cur, selector: str) -> tuple[str, str, str, str]:
@@ -91,6 +87,9 @@ def register(app: typer.Typer):
                     (mention_id, block_id, entity_id, language),
                 )
                 db.conn.commit()
+        except GuardViolation as e:
+            print(str(e))
+            sys.exit(1)
         except RuntimeError as e:
             print(str(e))
             sys.exit(1)
@@ -136,7 +135,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                mid, block_id, entity_id, _lang = _resolve_mention(cur, selector)
+                mid, _block_id, entity_id, _lang = _resolve_mention(cur, selector)
 
                 # Get info for confirmation message
                 cur.execute(
@@ -160,10 +159,10 @@ def register(app: typer.Typer):
         selector: str = typer.Argument(help="Mention index or UUID"),
         plural: bool = typer.Option(False, "--plural", help="Pluralize"),
         possessive: bool = typer.Option(False, "--possessive", help="Add possessive (English only)"),
-        article: Optional[str] = typer.Option(
+        article: str | None = typer.Option(
             None, "--article", help="Article: 'a' or 'the' (English only)"
         ),
-        case: Optional[str] = typer.Option(
+        case: str | None = typer.Option(
             None, "--case", help="Case: 'plain'|'poss' (en) or 'nom'|'gen'|'dat'|'acc'|'inst'|'loc'|'voc' (pl)"
         ),
     ) -> None:
@@ -191,7 +190,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                mid, block_id, entity_id, language = _resolve_mention(cur, selector)
+                mid, _block_id, entity_id, language = _resolve_mention(cur, selector)
 
                 # Look up base_form from entity_labels for this language
                 cur.execute(

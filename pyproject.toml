@@ -16,6 +16,13 @@ dependencies = [
 [project.scripts]
 littera = "littera.cli.app:app"
 
+[project.optional-dependencies]
+# A fresh checkout could not run the suite: neither pytest nor ruff was declared.
+dev = [
+    "pytest>=8",
+    "ruff>=0.16",
+]
+
 [tool.mypy]
 disable_error_code = [
     "attr-defined",
@@ -40,3 +47,10 @@ littera = "littera.cli.app:app"
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py311"
+
+# Rule selection is intentionally left at ruff's defaults. Enabling the full
+# E/S/B sets surfaces ~130 further findings (long lines, SQL-string warnings,
+# subprocess use in tests); that is a worthwhile cleanup but a separate task.

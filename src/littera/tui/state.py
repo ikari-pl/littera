@@ -12,8 +12,7 @@ Architecture:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Literal, Any, Union
-
+from typing import Any, Literal
 
 # =============================================================================
 # Data Types
@@ -27,8 +26,8 @@ EditKind = Literal["entity_note", "block_text"]
 @dataclass(frozen=True)
 class Selection:
     """Represents a selected item in a view."""
-    kind: Optional[str] = None
-    id: Optional[str] = None
+    kind: str | None = None
+    id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +52,10 @@ class EditSession:
     original_text: str
     current_text: str
     return_to: ViewName
+    # Human title of what is being edited ("Block (en)", "Note: concept Time").
+    # The caller always knows it; without storing it the editor could only
+    # show the row's UUID.
+    title: str = "Editor"
 
 
 # =============================================================================
@@ -108,6 +111,9 @@ class OutlineState:
     selection: Selection = field(default_factory=Selection)
     items: list[OutlineItem] = field(default_factory=list)
     detail: str = ""
+    # Explicit, reducer-owned override of the detail pane (e.g. "show mentions").
+    # None means "derive detail from the current selection".
+    detail_override: str | None = None
 
 
 @dataclass
@@ -116,6 +122,7 @@ class EntitiesState:
     selection: Selection = field(default_factory=Selection)
     items: list[EntityItem] = field(default_factory=list)
     detail: str = ""
+    detail_override: str | None = None
 
 
 @dataclass
@@ -124,6 +131,7 @@ class AlignmentsState:
     selection: Selection = field(default_factory=Selection)
     items: list[AlignmentItem] = field(default_factory=list)
     detail: str = ""
+    detail_override: str | None = None
 
 
 @dataclass
@@ -132,6 +140,7 @@ class ReviewsState:
     items: list[ReviewItem] = field(default_factory=list)
     selection: Selection = field(default_factory=Selection)
     detail: str = ""
+    detail_override: str | None = None
 
 
 @dataclass
@@ -148,19 +157,16 @@ class EditorOverlay:
 @dataclass(frozen=True)
 class GotoOutline:
     """Switch to outline view."""
-    pass
 
 
 @dataclass(frozen=True)
 class GotoEntities:
     """Switch to entities view."""
-    pass
 
 
 @dataclass(frozen=True)
 class GotoAlignments:
     """Switch to alignments view."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -172,13 +178,11 @@ class AlignmentsSelect:
 @dataclass(frozen=True)
 class AlignmentsClearSelection:
     """Clear alignment selection."""
-    pass
 
 
 @dataclass(frozen=True)
 class ClearSelection:
     """Clear selection in current view."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -191,7 +195,6 @@ class OutlineSelect:
 @dataclass(frozen=True)
 class OutlineClearSelection:
     """Clear outline selection."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -203,7 +206,6 @@ class OutlinePush:
 @dataclass(frozen=True)
 class OutlinePop:
     """Pop the path (go back up)."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -215,13 +217,11 @@ class EntitiesSelect:
 @dataclass(frozen=True)
 class EntitiesClearSelection:
     """Clear entity selection."""
-    pass
 
 
 @dataclass(frozen=True)
 class GotoReviews:
     """Switch to reviews view."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -233,7 +233,6 @@ class ReviewsSelect:
 @dataclass(frozen=True)
 class ReviewsClearSelection:
     """Clear review selection."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -242,39 +241,75 @@ class StartEdit:
     target: EditTarget
     text: str
     return_to: ViewName
+    title: str = "Editor"
 
 
 @dataclass(frozen=True)
 class ExitEditor:
     """Exit editor overlay."""
-    pass
+
+
+@dataclass(frozen=True)
+class ClearDetail:
+    """Drop any pinned detail text; panes return to live data."""
+
+
+@dataclass(frozen=True)
+class SetDetail:
+    """Pin an explicit detail pane text for the current view.
+
+    The override survives data refreshes (so "show mentions" / "show gaps"
+    stay on screen) and is cleared by the reducer on any selection change.
+    """
+    text: str
 
 
 # Action union type for type checking
-Action = Union[
-    GotoOutline,
-    GotoEntities,
-    GotoAlignments,
-    GotoReviews,
-    ClearSelection,
-    OutlineSelect,
-    OutlineClearSelection,
-    OutlinePush,
-    OutlinePop,
-    EntitiesSelect,
-    EntitiesClearSelection,
-    AlignmentsSelect,
-    AlignmentsClearSelection,
-    ReviewsSelect,
-    ReviewsClearSelection,
-    StartEdit,
-    ExitEditor,
-]
+Action = (
+    GotoOutline
+    | GotoEntities
+    | GotoAlignments
+    | GotoReviews
+    | ClearSelection
+    | OutlineSelect
+    | OutlineClearSelection
+    | OutlinePush
+    | OutlinePop
+    | EntitiesSelect
+    | EntitiesClearSelection
+    | AlignmentsSelect
+    | AlignmentsClearSelection
+    | ReviewsSelect
+    | ReviewsClearSelection
+    | StartEdit
+    | ExitEditor
+    | ClearDetail
+    | SetDetail
+)
+
+
+def _view_state(state: "AppState", view: str):
+    """The per-view state object for a view name, or None."""
+    if view == "outline":
+        return state.outline
+    if view == "entities":
+        return state.entities
+    if view == "alignments":
+        return state.alignments
+    if view == "reviews":
+        return state.reviews
+    return None
 
 
 # =============================================================================
 # Reducer
 # =============================================================================
+
+def _clear_all_overrides(state) -> None:
+    """Clear every view's pinned detail text."""
+    for view_state in (state.outline, state.entities, state.alignments, state.reviews):
+        view_state.detail_override = None
+
 
 def reduce(state: "AppState", action: Action) -> None:
     """
@@ -287,68 +322,95 @@ def reduce(state: "AppState", action: Action) -> None:
         case GotoOutline():
             state.view = "outline"
             state.active_base = "outline"
+            # A pinned mentions/gaps pane belongs to the moment it was asked
+            # for, not to every later visit.
+            _clear_all_overrides(state)
 
         case GotoEntities():
             state.view = "entities"
             state.active_base = "entities"
+            # A pinned mentions/gaps pane belongs to the moment it was asked
+            # for, not to every later visit.
+            _clear_all_overrides(state)
 
         case GotoAlignments():
             state.view = "alignments"
             state.active_base = "alignments"
+            # A pinned mentions/gaps pane belongs to the moment it was asked
+            # for, not to every later visit.
+            _clear_all_overrides(state)
 
         case GotoReviews():
             state.view = "reviews"
             state.active_base = "reviews"
+            # A pinned mentions/gaps pane belongs to the moment it was asked
+            # for, not to every later visit.
+            _clear_all_overrides(state)
 
         case ClearSelection():
-            if state.view == "outline":
-                state.outline.selection = Selection()
-            elif state.view == "entities":
-                state.entities.selection = Selection()
-            elif state.view == "alignments":
-                state.alignments.selection = Selection()
-            elif state.view == "reviews":
-                state.reviews.selection = Selection()
+            view_state = _view_state(state, state.view)
+            if view_state is not None:
+                view_state.selection = Selection()
+                view_state.detail_override = None
 
         case OutlineSelect(kind=kind, item_id=item_id):
             state.outline.selection = Selection(kind=kind, id=item_id)
+            state.outline.detail_override = None
 
         case OutlineClearSelection():
             state.outline.selection = Selection()
+            state.outline.detail_override = None
 
         case OutlinePush(element=element):
             state.outline.path.append(element)
             state.outline.selection = Selection()
+            state.outline.detail_override = None
 
         case OutlinePop():
             if state.outline.path:
                 state.outline.path.pop()
                 state.outline.selection = Selection()
+                state.outline.detail_override = None
 
         case EntitiesSelect(entity_id=entity_id):
             state.entities.selection = Selection(kind="entity", id=entity_id)
+            state.entities.detail_override = None
 
         case EntitiesClearSelection():
             state.entities.selection = Selection()
+            state.entities.detail_override = None
 
         case AlignmentsSelect(alignment_id=alignment_id):
             state.alignments.selection = Selection(kind="alignment", id=alignment_id)
+            state.alignments.detail_override = None
 
         case AlignmentsClearSelection():
             state.alignments.selection = Selection()
+            state.alignments.detail_override = None
 
         case ReviewsSelect(review_id=review_id):
             state.reviews.selection = Selection(kind="review", id=review_id)
+            state.reviews.detail_override = None
 
         case ReviewsClearSelection():
             state.reviews.selection = Selection()
+            state.reviews.detail_override = None
 
-        case StartEdit(target=target, text=text, return_to=return_to):
+        case ClearDetail():
+            _clear_all_overrides(state)
+
+        case SetDetail(text=text):
+            view_state = _view_state(state, state.view)
+            if view_state is not None:
+                view_state.detail_override = text
+
+        case StartEdit(target=target, text=text, return_to=return_to, title=title):
             session = EditSession(
                 target=target,
                 original_text=text,
                 current_text=text,
                 return_to=return_to,
+                title=title,
             )
             state.editor = EditorOverlay(session=session, return_to=return_to)
             state.view = "editor"
@@ -363,10 +425,6 @@ def reduce(state: "AppState", action: Action) -> None:
 # =============================================================================
 # App State
 # =============================================================================
-
-# Import here to avoid circular import issues
-from littera.tui.undo import UndoRedo
-
 
 @dataclass
 class AppState:
@@ -388,13 +446,10 @@ class AppState:
     entities: EntitiesState = field(default_factory=EntitiesState)
     alignments: AlignmentsState = field(default_factory=AlignmentsState)
     reviews: ReviewsState = field(default_factory=ReviewsState)
-    editor: Optional[EditorOverlay] = None
-
-    # Undo/redo state (scoped to edit sessions)
-    undo_redo: UndoRedo = field(default_factory=UndoRedo)
+    editor: EditorOverlay | None = None
 
     # Work context (loaded from config.yml)
-    work: Optional[dict[str, Any]] = None
+    work: dict[str, Any] | None = None
 
     # Database connection (managed by app lifecycle)
     db: Any = None
@@ -412,7 +467,7 @@ class AppState:
     # -------------------------------------------------------------------------
 
     @property
-    def edit_session(self) -> Optional[EditSession]:
+    def edit_session(self) -> EditSession | None:
         """Current edit session, if editor is open."""
         if self.editor is not None:
             return self.editor.session
@@ -453,7 +508,7 @@ class AppState:
         return "documents"
 
     @property
-    def current_document(self) -> Optional[PathElement]:
+    def current_document(self) -> PathElement | None:
         """The current document in the path, if any."""
         for elem in self.outline.path:
             if elem.kind == "document":
@@ -461,7 +516,7 @@ class AppState:
         return None
 
     @property
-    def current_section(self) -> Optional[PathElement]:
+    def current_section(self) -> PathElement | None:
         """The current section in the path, if any."""
         for elem in self.outline.path:
             if elem.kind == "section":

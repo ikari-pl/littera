@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import List
 
 import typer
 
@@ -57,7 +56,7 @@ def register(app: typer.Typer) -> None:
     @app.command("property-set")
     def property_set(
         entity: str = typer.Argument(help="Entity index, UUID, or label"),
-        pairs: List[str] = typer.Argument(help="key=value pairs"),
+        pairs: list[str] = typer.Argument(help="key=value pairs"),  # noqa: B008 - Typer builds the CLI from defaults
     ) -> None:
         """Set properties on an entity (merged into existing)."""
         # Parse key=value pairs

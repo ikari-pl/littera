@@ -57,7 +57,7 @@ def register(app: typer.Typer) -> None:
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                eid, etype, name = _resolve_entity(cur, entity)
+                eid, _etype, name = _resolve_entity(cur, entity)
 
                 label_id = str(uuid.uuid4())
                 cur.execute(

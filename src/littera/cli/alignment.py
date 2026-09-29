@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import sys
 import uuid
-from typing import Optional
 
 import typer
 
 from littera.cli.block import GLOBAL_BLOCK_ORDER_SQL
 from littera.db.workdb import open_work_db
+from littera.domain.guards import GuardViolation, ensure_alignment_languages_differ
 
 
 def _resolve_block_global(cur, selector: str) -> tuple[str, str, str]:
@@ -93,9 +93,7 @@ def register(app: typer.Typer) -> None:
                 src_id, src_lang, src_text = _resolve_block_global(cur, source_block)
                 tgt_id, tgt_lang, tgt_text = _resolve_block_global(cur, target_block)
 
-                if src_lang == tgt_lang:
-                    print(f"Cannot align blocks in the same language ({src_lang})")
-                    sys.exit(1)
+                ensure_alignment_languages_differ(src_lang, tgt_lang)
 
                 # Check for duplicate
                 cur.execute(
@@ -120,6 +118,9 @@ def register(app: typer.Typer) -> None:
                 )
                 db.conn.commit()
 
+        except GuardViolation as e:
+            print(str(e))
+            sys.exit(1)
         except RuntimeError as e:
             print(str(e))
             sys.exit(1)
@@ -131,7 +132,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command("list")
     def list_alignments(
-        block: Optional[str] = typer.Option(None, "--block", "-b"),
+        block: str | None = typer.Option(None, "--block", "-b"),
     ) -> None:
         """List block alignments."""
         try:
@@ -212,7 +213,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command()
     def gaps(
-        block: Optional[str] = typer.Argument(None),
+        block: str | None = typer.Argument(None),
         suggest: bool = typer.Option(False, "--suggest", "-s"),
     ) -> None:
         """Detect entities missing labels in aligned languages.

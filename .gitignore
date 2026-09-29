@@ -55,3 +55,7 @@ my-work/
 # Ad-hoc UI screenshots and Playwright output
 *.png
 desktop/test-results/
+
+# beads local lock files
+*.gate.lock
+.beads/*.gate.lock

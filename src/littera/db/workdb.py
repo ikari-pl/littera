@@ -10,16 +10,15 @@ This module is intentionally small and explicit. It is used by both CLI and TUI.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
-
-import json
-import os
-import sys
-import time
-import subprocess
 
 import psycopg
 import yaml
@@ -105,6 +104,19 @@ def renew_pg_lease(littera_dir: Path, seconds: int) -> None:
     _lease_path(littera_dir).write_text(json.dumps(lease))
 
 
+def release_pg_lease(littera_dir: Path) -> None:
+    """Drop the lease file.
+
+    A watcher that finds no lease file exits without stopping Postgres, which
+    is what we want when the last client is shutting Postgres down itself.
+    """
+
+    try:
+        _lease_path(littera_dir).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _spawn_lease_watcher(littera_dir: Path) -> None:
     """Spawn a detached process that stops Postgres after lease expiry."""
 
@@ -121,7 +133,7 @@ def _spawn_lease_watcher(littera_dir: Path) -> None:
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - if the watcher cannot spawn we leave PG running; correctness preserved
         # If the watcher can't be spawned, we silently fall back to leaving
         # Postgres running. This preserves correctness.
         return

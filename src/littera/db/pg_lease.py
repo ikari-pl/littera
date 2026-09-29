@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         _, _, cfg = load_work_cfg(work_dir)
-    except Exception:
+    except Exception:  # noqa: BLE001 - watcher must never crash the user's session; exit quietly
         return 0
 
     pg_cfg = postgres_config_from_work(littera_dir, cfg)
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             lease = json.loads(lease_path.read_text())
             expires_at = float(lease.get("expires_at", 0))
-        except Exception:
+        except Exception:  # noqa: BLE001 - corrupt or racing lease file: exit quietly rather than kill PG
             return 0
 
         now = time.time()

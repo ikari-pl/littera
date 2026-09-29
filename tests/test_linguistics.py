@@ -3,21 +3,18 @@
 Unit tests (no DB) + CLI integration tests (real embedded PG).
 """
 
-import json
 
-import pytest
 
 from littera.linguistics.en import surface_form
 
 # Re-use test helpers from test_invariants
 from tests.test_invariants import (
-    init_work,
-    run,
+    add_block,
     add_document,
     add_section,
-    add_block,
+    init_work,
+    run,
 )
-
 
 # ── Unit tests (no DB) ──────────────────────────────────────────────────────
 
@@ -137,8 +134,9 @@ class TestMentionSetSurface:
             assert res.returncode == 0, res.stderr
 
             # Verify features stored correctly by querying DB directly
-            from littera.db.workdb import open_work_db
             import os
+
+            from littera.db.workdb import open_work_db
 
             os.chdir(workdir)
             with open_work_db() as db:

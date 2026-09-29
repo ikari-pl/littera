@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 import uuid
-from typing import Optional
 
 import typer
 
@@ -188,11 +187,11 @@ def register(app: typer.Typer) -> None:
     @app.command()
     def add(
         description: str,
-        scope: Optional[str] = typer.Option(None, "--scope", "-s"),
-        scope_id: Optional[str] = typer.Option(None, "--scope-id"),
-        type: Optional[str] = typer.Option(None, "--type", "-t"),
+        scope: str | None = typer.Option(None, "--scope", "-s"),
+        scope_id: str | None = typer.Option(None, "--scope-id"),
+        type: str | None = typer.Option(None, "--type", "-t"),
         severity: str = typer.Option("medium", "--severity"),
-        metadata: Optional[str] = typer.Option(None, "--metadata", "-m"),
+        metadata: str | None = typer.Option(None, "--metadata", "-m"),
     ) -> None:
         """Add a review."""
         if severity not in VALID_SEVERITIES:
@@ -281,12 +280,12 @@ def register(app: typer.Typer) -> None:
     @app.command()
     def edit(
         selector: str,
-        description: Optional[str] = typer.Option(None, "--description", "-d"),
-        scope: Optional[str] = typer.Option(None, "--scope", "-s"),
-        scope_id: Optional[str] = typer.Option(None, "--scope-id"),
-        type: Optional[str] = typer.Option(None, "--type", "-t"),
-        severity: Optional[str] = typer.Option(None, "--severity"),
-        metadata: Optional[str] = typer.Option(None, "--metadata", "-m"),
+        description: str | None = typer.Option(None, "--description", "-d"),
+        scope: str | None = typer.Option(None, "--scope", "-s"),
+        scope_id: str | None = typer.Option(None, "--scope-id"),
+        type: str | None = typer.Option(None, "--type", "-t"),
+        severity: str | None = typer.Option(None, "--severity"),
+        metadata: str | None = typer.Option(None, "--metadata", "-m"),
         clear_scope: bool = typer.Option(False, "--clear-scope"),
     ) -> None:
         """Edit a review. Only provided fields are changed."""
@@ -360,7 +359,7 @@ def register(app: typer.Typer) -> None:
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                rid, desc, scope, scope_id = _resolve_review(cur, selector)
+                rid, desc, _scope, _scope_id = _resolve_review(cur, selector)
                 cur.execute("DELETE FROM reviews WHERE id = %s", (rid,))
                 db.conn.commit()
         except RuntimeError as e:

@@ -1,6 +1,6 @@
 """Tests for littera review add|list|edit|delete commands."""
 
-from test_invariants import run, init_work, add_document, add_section, add_block
+from test_invariants import add_block, add_document, add_section, init_work, run
 
 
 def test_review_add_global(tmp_path):

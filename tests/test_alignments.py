@@ -5,18 +5,16 @@ Uses real embedded PostgreSQL — no mocks. Test helpers from test_invariants.py
 
 import os
 import socket
-import subprocess
 
 import pytest
 
 from tests.test_invariants import (
-    init_work,
-    run,
+    add_block,
     add_document,
     add_section,
-    add_block,
+    init_work,
+    run,
 )
-
 
 # --- fixtures ---
 
@@ -213,7 +211,6 @@ def test_gaps_scoped_to_block(tmp_path):
 def test_suggest_label_graceful_when_no_backend(bilingual_work):
     """Without LITTERA_LLM_BACKEND, suggest-label prints fallback."""
     workdir = bilingual_work
-    repo_root = workdir.parents[1] if hasattr(workdir, 'parents') else workdir.parent.parent
     # Run without LITTERA_LLM_BACKEND in env
     env = {**os.environ, "PATH": os.environ.get("PATH", "")}
     env.pop("LITTERA_LLM_BACKEND", None)
@@ -251,7 +248,6 @@ def _lmstudio_reachable():
 )
 def test_suggest_label_lmstudio_integration(bilingual_work):
     """Integration test: real LM Studio call. Skipped if unavailable."""
-    workdir = bilingual_work
 
     from littera.linguistics.suggest import suggest_label
 

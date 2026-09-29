@@ -304,7 +304,7 @@ def register(app: typer.Typer):
         try:
             with open_work_db() as db:
                 cur = db.conn.cursor()
-                block_id, old_lang, text = _resolve_block_global(cur, block)
+                block_id, old_lang, _text = _resolve_block_global(cur, block)
 
                 cur.execute(
                     "UPDATE blocks SET language = %s WHERE id = %s",

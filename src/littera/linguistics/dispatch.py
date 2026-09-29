@@ -7,7 +7,7 @@ which module handles which language.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 _REGISTRY: dict[str, Callable] = {}
 

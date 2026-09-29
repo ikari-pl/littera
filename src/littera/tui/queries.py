@@ -10,8 +10,13 @@ Usage in app.py:
 
 from littera.cli.block import SIBLING_ORDER_SQL
 from littera.cli.words import count_scope
-from littera.tui.state import AppState, OutlineItem, EntityItem, AlignmentItem, ReviewItem
-
+from littera.tui.state import (
+    AlignmentItem,
+    AppState,
+    EntityItem,
+    OutlineItem,
+    ReviewItem,
+)
 
 # =============================================================================
 # Outline
@@ -21,9 +26,6 @@ def refresh_outline(state: AppState) -> None:
     """Populate state.outline.items and state.outline.detail from DB."""
     items: list[OutlineItem] = []
     detail = ""
-
-    nav_level = state.nav_level
-    model_help = ""  # Views handle help text display
 
     with state.db.cursor() as cur:
         if not state.path:
@@ -46,7 +48,10 @@ def refresh_outline(state: AppState) -> None:
                     (last.id,),
                 )
                 for block_id, lang, text in cur.fetchall():
-                    preview = text.replace("\n", " ")[:60]
+                    preview = (text or "").replace("\n", " ").strip()[:60]
+                    # An empty block is a real, addressable block; it just has
+                    # nothing in it yet. Say so rather than showing a blank row.
+                    preview = preview or "(empty)"
                     items.append(
                         OutlineItem(id=str(block_id), kind="block", title=preview, language=lang)
                     )
@@ -57,6 +62,10 @@ def refresh_outline(state: AppState) -> None:
             detail = _outline_detail(cur, sel, state.db)
 
     state.outline.items = items
+    # An explicit override (e.g. "show mentions") wins over the
+    # selection-derived detail until the reducer clears it.
+    if state.outline.detail_override is not None:
+        detail = state.outline.detail_override
     state.outline.detail = detail
 
 
@@ -118,10 +127,29 @@ def _outline_detail(cur, sel, conn) -> str:
 # Entities
 # =============================================================================
 
+EMPTY_ENTITIES = (
+    "No entities yet.\n\n"
+    "Entities are the global concepts, people and places your writing is\n"
+    "about. Press 'a' to add one, then 'l' on a block to mention it."
+)
+
+EMPTY_ALIGNMENTS = (
+    "No alignments yet.\n\n"
+    "An alignment links two blocks — a paragraph and its translation,\n"
+    "say. Press 'a' to pick the two blocks."
+)
+
+EMPTY_REVIEWS = (
+    "No reviews yet.\n\n"
+    "A review is a scoped note about quality or intent: what to fix, and\n"
+    "where. Press 'a' to write one."
+)
+
+
 def refresh_entities(state: AppState) -> None:
     """Populate state.entities.items and state.entities.detail from DB."""
     items: list[EntityItem] = []
-    detail = "Select an entity"
+    detail = "Select an entity — Enter edits its note, L labels, p properties"
 
     with state.db.cursor() as cur:
         cur.execute(
@@ -139,7 +167,13 @@ def refresh_entities(state: AppState) -> None:
         if sel and sel.kind == "entity" and sel.id:
             detail = _entity_detail(cur, sel.id, state.work)
 
+    if not items:
+        detail = EMPTY_ENTITIES
     state.entities.items = items
+    # An explicit override (e.g. "show mentions") wins over the
+    # selection-derived detail until the reducer clears it.
+    if state.entities.detail_override is not None:
+        detail = state.entities.detail_override
     state.entities.detail = detail
 
 
@@ -272,12 +306,55 @@ def refresh_reviews(state: AppState) -> None:
 
         # Detail for selected review
         sel = state.reviews.selection
-        detail = "Select a review"
+        detail = "Select a review — Enter or Ctrl+E edits it, d deletes it"
         if sel and sel.kind == "review" and sel.id:
             detail = _review_detail(cur, sel.id)
 
+    if not items:
+        detail = EMPTY_REVIEWS
     state.reviews.items = items
+    # An explicit override (e.g. "show mentions") wins over the
+    # selection-derived detail until the reducer clears it.
+    if state.reviews.detail_override is not None:
+        detail = state.reviews.detail_override
     state.reviews.detail = detail
+
+
+def scope_target_label(cur, scope: str | None, scope_id) -> str | None:
+    """Human name of a review's scope target, or None if it cannot be named.
+
+    reviews.scope_id has no foreign key, so a target can legitimately be gone;
+    say so rather than printing a bare UUID at the writer.
+    """
+    if not scope or not scope_id:
+        return None
+    scope_id = str(scope_id)
+
+    sql_by_scope = {
+        "work": "SELECT title FROM works WHERE id = %s",
+        "document": "SELECT title FROM documents WHERE id = %s",
+        "section": "SELECT title FROM sections WHERE id = %s",
+        "entity": "SELECT canonical_label FROM entities WHERE id = %s",
+        "block": "SELECT source_text FROM blocks WHERE id = %s",
+    }
+    sql = sql_by_scope.get(scope)
+    if sql is None:
+        return None
+
+    cur.execute(sql, (scope_id,))
+    row = cur.fetchone()
+    if row is None:
+        return "(deleted)"
+    value = (row[0] or "").replace("\n", " ").strip()
+    if not value:
+        return "(untitled)"
+    return value[:60] + ("…" if len(value) > 60 else "")
+
+
+def fetch_scope_label(db, scope: str | None, scope_id) -> str | None:
+    """Name of a review scope target, for dialogs. None if it has no name."""
+    with db.cursor() as cur:
+        return scope_target_label(cur, scope, scope_id)
 
 
 def _review_detail(cur, review_id: str) -> str:
@@ -295,14 +372,22 @@ def _review_detail(cur, review_id: str) -> str:
     if row is None:
         return f"Review {review_id} not found"
 
-    rid, scope, scope_id, issue_type, description, severity, metadata, created_at = row
+    _rid, scope, scope_id, issue_type, description, severity, metadata, created_at = row
 
-    lines = [f"Review: {rid}", ""]
-    lines.append(f"Severity: {severity}")
+    # The id says nothing to a writer; the severity and the first line of the
+    # description say what this review is.
+    headline = (description or "(no description)").strip().splitlines()[0]
+    lines = [f"Review [{severity or 'medium'}]: {headline}", ""]
     if scope:
-        lines.append(f"Scope: {scope}")
-    if scope_id:
-        lines.append(f"Scope ID: {scope_id}")
+        target = scope_target_label(cur, scope, scope_id)
+        if target is not None:
+            lines.append(f"Scope: {scope} — {target}")
+        elif scope_id:
+            # A scope with no readable target (e.g. alignment): the id is all
+            # there is, and dropping it would hide the binding entirely.
+            lines.append(f"Scope: {scope} ({scope_id})")
+        else:
+            lines.append(f"Scope: {scope}")
     if issue_type:
         lines.append(f"Issue type: {issue_type}")
     lines.append(f"Created: {created_at}")
@@ -396,6 +481,41 @@ def fetch_block_mentions(db, block_id: str) -> list[tuple[str, str, str, str, st
         ]
 
 
+def fetch_entity_labels(db, entity_id: str) -> list[tuple[str, str]]:
+    """(language, base_form) for every label on an entity."""
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT language, base_form FROM entity_labels "
+            "WHERE entity_id = %s ORDER BY language",
+            (entity_id,),
+        )
+        return [(row[0], row[1]) for row in cur.fetchall()]
+
+
+def fetch_entity_properties(db, entity_id: str) -> dict:
+    """The entity's properties object, or an empty dict."""
+    with db.cursor() as cur:
+        cur.execute("SELECT properties FROM entities WHERE id = %s", (entity_id,))
+        row = cur.fetchone()
+    if not row or not row[0]:
+        return {}
+    return dict(row[0])
+
+
+def list_entity_types(db) -> list[str]:
+    """Entity types already used in this database, most common first."""
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT entity_type, COUNT(*) AS n FROM entities "
+            "GROUP BY entity_type ORDER BY n DESC, entity_type"
+        )
+        types = [row[0] for row in cur.fetchall() if row[0]]
+    for default in ("concept", "person", "place"):
+        if default not in types:
+            types.append(default)
+    return types
+
+
 def fetch_item_title(db, kind: str, item_id: str) -> str:
     """Fetch title for a document or section. Returns title string."""
     with db.cursor() as cur:
@@ -439,7 +559,7 @@ def list_blocks_for_picker(db) -> list[tuple[str, str]]:
 def refresh_alignments(state: AppState) -> None:
     """Populate state.alignments.items from DB."""
     items: list[AlignmentItem] = []
-    detail = "Select an alignment"
+    detail = "Select an alignment — d deletes it, g looks for gaps"
 
     with state.db.cursor() as cur:
         cur.execute("""
@@ -465,7 +585,13 @@ def refresh_alignments(state: AppState) -> None:
         if sel and sel.kind == "alignment" and sel.id:
             detail = _alignment_detail(cur, sel.id)
 
+    if not items:
+        detail = EMPTY_ALIGNMENTS
     state.alignments.items = items
+    # An explicit override (e.g. "show mentions") wins over the
+    # selection-derived detail until the reducer clears it.
+    if state.alignments.detail_override is not None:
+        detail = state.alignments.detail_override
     state.alignments.detail = detail
 
 

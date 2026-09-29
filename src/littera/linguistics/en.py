@@ -11,7 +11,6 @@ Adj pipeline:   base_form -> [override?] -> [compare]
 from __future__ import annotations
 
 import json
-import re
 
 import inflect
 
@@ -372,20 +371,19 @@ def surface_form(
         text = _check_override(props, "pl")  # type: ignore[assignment]
     else:
         # Step 2: Pluralize (skip proper nouns and uncountable nouns)
-        if features.get("number") == "pl" and not _is_proper_noun(text):
-            if props.get("countable") != "no":
-                result = _engine.plural_noun(text)
-                if result:
-                    text = result
+        if (
+            features.get("number") == "pl"
+            and not _is_proper_noun(text)
+            and props.get("countable") != "no"
+        ):
+            result = _engine.plural_noun(text)
+            if result:
+                text = result
 
     # Step 3: Possessive suffix
-    if features.get("case") == "poss":
-        # If override already handled possessive via compound key, skip
-        if not override_result or ":" not in compound_key:
-            if text.endswith("s"):
-                text = text + "'"
-            else:
-                text = text + "'s"
+    # Skip if an override already handled the possessive via a compound key.
+    if features.get("case") == "poss" and (not override_result or ":" not in compound_key):
+        text = text + "'" if text.endswith("s") else text + "'s"
 
     # Step 4: Article
     article = features.get("article")

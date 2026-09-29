@@ -3,6 +3,7 @@ Test to verify state.py fixes.
 """
 
 from dataclasses import fields
+
 from littera.tui.state import AppState, EditSession, EditTarget
 
 

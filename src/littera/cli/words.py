@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 import sys
-from typing import Optional
 
 import typer
 
@@ -35,8 +34,8 @@ def count_words(source_text: str | None) -> int:
 
 def count_scope(
     conn,
-    document_id: Optional[str] = None,
-    section_id: Optional[str] = None,
+    document_id: str | None = None,
+    section_id: str | None = None,
 ) -> dict:
     """Count words and blocks in a work, document, or section."""
     cur = conn.cursor()
@@ -64,10 +63,10 @@ def format_count(stats: dict, scope: str = "work") -> str:
 def register(app: typer.Typer) -> None:
     @app.command()
     def wc(
-        document: Optional[str] = typer.Option(
+        document: str | None = typer.Option(
             None, "--document", "-d", help="Document index, UUID, or title"
         ),
-        section: Optional[str] = typer.Option(
+        section: str | None = typer.Option(
             None, "--section", "-s", help="Section index, UUID, or title"
         ),
     ) -> None:

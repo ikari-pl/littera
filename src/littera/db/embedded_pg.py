@@ -9,15 +9,14 @@ globally under the user home directory and symlinked into each work.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import hashlib
 import platform
 import shutil
 import tarfile
 import urllib.request
 import zipfile
-
+from dataclasses import dataclass
+from pathlib import Path
 
 POSTGRES_VERSION = "18.1.0"
 

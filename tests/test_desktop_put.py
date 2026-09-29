@@ -11,9 +11,10 @@ from http.server import HTTPServer
 from threading import Thread
 from urllib.request import Request, urlopen
 
+from test_invariants import add_block, add_document, add_section, init_work, run
+
 from littera.db.workdb import open_work_db
 from littera.desktop.server import SidecarHandler
-from test_invariants import add_block, add_document, add_section, init_work, run
 
 
 @contextmanager
@@ -225,15 +226,14 @@ def test_status_and_wc_count_saved_words(tmp_path):
         add_section(workdir)
         add_block(workdir, "one two three")
 
-        with open_work_db(workdir) as db:
-            with sidecar(db) as base:
-                status = get_json(base, "/api/status")
-                assert status["word_count"] == 3
-                assert status["words"] == 3
-                assert status["blocks"] == 1
-                wc = get_json(base, "/api/wc")
-                assert wc["words"] == 3
-                assert wc["blocks"] == 1
+        with open_work_db(workdir) as db, sidecar(db) as base:
+            status = get_json(base, "/api/status")
+            assert status["word_count"] == 3
+            assert status["words"] == 3
+            assert status["blocks"] == 1
+            wc = get_json(base, "/api/wc")
+            assert wc["words"] == 3
+            assert wc["blocks"] == 1
 
 
 def test_export_markdown_compile_query(tmp_path):
@@ -242,10 +242,9 @@ def test_export_markdown_compile_query(tmp_path):
         add_section(workdir, "S")
         add_block(workdir, "Hello world")
 
-        with open_work_db(workdir) as db:
-            with sidecar(db) as base:
-                labeled = get_json(base, "/api/export/markdown")
-                compiled = get_json(base, "/api/export/markdown?compile=1")
+        with open_work_db(workdir) as db, sidecar(db) as base:
+            labeled = get_json(base, "/api/export/markdown")
+            compiled = get_json(base, "/api/export/markdown?compile=1")
         assert "## Document: Ch" in labeled["markdown"]
         assert "[en] Hello world" in labeled["markdown"]
         assert "## Document:" not in compiled["markdown"]

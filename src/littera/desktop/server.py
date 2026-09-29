@@ -9,18 +9,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import select
 import sys
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from littera.cli.block import GLOBAL_BLOCK_ORDER_SQL, SIBLING_ORDER_SQL, reorder_siblings
-from littera.db.workdb import open_work_db, WorkDb
+import psycopg
 
+from littera.cli.block import (
+    GLOBAL_BLOCK_ORDER_SQL,
+    SIBLING_ORDER_SQL,
+    reorder_siblings,
+)
+from littera.db.workdb import WorkDb, open_work_db
+from littera.domain import guards
+from littera.domain.guards import GuardViolation
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Route table — (pattern, method, handler_name)
@@ -108,9 +118,42 @@ class SidecarHandler(BaseHTTPRequestHandler):
             m = pattern.match(path)
             if m and route_method == method:
                 handler = getattr(self, handler_name)
-                self._json_response(handler(*m.groups()))
+                self._run(handler, m.groups())
                 return
         self.send_error(404)
+
+    def _run(self, handler, args):
+        """Run one route handler, surviving failure.
+
+        Every request shares one long-lived connection, and psycopg leaves it
+        in ``InFailedSqlTransaction`` after any error. Without a rollback one
+        bad request fails every later request until restart. Mirrors
+        ``LitteraApp._db`` in the TUI: roll back, answer, keep serving.
+        """
+        from littera.cli.review import ReviewUpdateError
+
+        try:
+            result = handler(*args)
+        except (psycopg.Error, GuardViolation, ReviewUpdateError) as exc:
+            # A refusal the user can act on: same shape as the handlers'
+            # own {"error": ...} answers, which the frontend displays.
+            self._rollback()
+            detail = str(exc).strip().splitlines()
+            self._json_response({"error": detail[0] if detail else type(exc).__name__})
+        except Exception as exc:
+            # Request boundary: a bug in one handler must not wedge the
+            # connection, or leave its half-done writes for the next commit.
+            self._rollback()
+            logger.exception("desktop request failed: %s %s", self.command, self.path)
+            self._json_response({"error": f"internal error: {type(exc).__name__}"}, status=500)
+        else:
+            self._json_response(result)
+
+    def _rollback(self) -> None:
+        try:
+            self.work_db.conn.rollback()
+        except psycopg.Error:
+            logger.exception("rollback failed")
 
     # -----------------------------------------------------------------
     # Route handlers
@@ -798,6 +841,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
             return {"error": "source_block_id and target_block_id required"}
         conn = self.work_db.conn
         with conn.cursor() as cur:
+            guards.ensure_blocks_alignable(cur, source_block_id, target_block_id)
             cur.execute(
                 "INSERT INTO block_alignments (source_block_id, target_block_id, alignment_type) "
                 "VALUES (%s, %s, %s) RETURNING id",
@@ -861,6 +905,7 @@ class SidecarHandler(BaseHTTPRequestHandler):
         severity = body.get("severity", "medium")
         conn = self.work_db.conn
         with conn.cursor() as cur:
+            guards.ensure_review_scope(cur, scope, scope_id)
             cur.execute(
                 "INSERT INTO reviews (work_id, scope, scope_id, issue_type, description, severity) "
                 "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
@@ -907,9 +952,9 @@ class SidecarHandler(BaseHTTPRequestHandler):
     # Response helpers
     # -----------------------------------------------------------------
 
-    def _json_response(self, data):
+    def _json_response(self, data, status: int = 200):
         body = json.dumps(data).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))

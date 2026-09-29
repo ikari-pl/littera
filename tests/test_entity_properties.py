@@ -1,6 +1,5 @@
 """Tests for entity property constraints and their effect on morphology."""
 
-from pathlib import Path
 
 from littera.linguistics.en import surface_form
 from tests.test_invariants import (
@@ -10,7 +9,6 @@ from tests.test_invariants import (
     init_work,
     run,
 )
-
 
 # ── Unit tests: surface_form with properties ────────────────────
 
@@ -142,7 +140,7 @@ def test_entity_list_shows_properties(tmp_path):
         assert "{countable: yes}" in res.stdout
         # Anna has no properties — no braces shown
         lines = res.stdout.strip().split("\n")
-        anna_line = [l for l in lines if "Anna" in l][0]
+        anna_line = next(l for l in lines if "Anna" in l)
         assert "{" not in anna_line
 
 

@@ -1,6 +1,13 @@
 """Tests for littera block move — order is structural identity for indexes."""
 
-from test_invariants import run, init_work, add_document, add_section, add_block
+from test_invariants import (
+    _stop_postgres,
+    add_block,
+    add_document,
+    add_section,
+    init_work,
+    run,
+)
 
 
 def test_block_move_changes_list_order(tmp_path):
@@ -337,3 +344,71 @@ def test_snapshot_second_write_does_not_clobber(tmp_path):
         assert dest2.exists()
         assert "Keep" in dest1.read_text(encoding="utf-8")
         assert "Keep" in dest2.read_text(encoding="utf-8")
+
+
+def test_import_appends_to_non_empty_work(tmp_path):
+    """Importing into a work that already holds documents appends, never interleaves."""
+    with init_work(tmp_path) as workdir:
+        add_document(workdir, "Imported1")
+        add_document(workdir, "Imported2")
+
+        dest = workdir / "payload.json"
+        res = run(f"littera export json -o {dest}", cwd=workdir)
+        assert res.returncode == 0, res.stderr
+
+        other = tmp_path / "other"
+        other.mkdir()
+        res = run("littera init .", cwd=other)
+        assert res.returncode == 0, res.stderr
+        try:
+            add_document(other, "Existing1")
+            add_document(other, "Existing2")
+            # Renumber the existing siblings the way a move does.
+            res = run("littera doc move 1 1", cwd=other)
+            assert res.returncode == 0, res.stderr
+
+            res = run(f"littera import json {dest}", cwd=other)
+            assert res.returncode == 0, res.stderr
+
+            res = run("littera doc list", cwd=other)
+            assert res.returncode == 0, res.stderr
+            assert "[1] Existing1" in res.stdout
+            assert "[2] Existing2" in res.stdout
+            assert "[3] Imported1" in res.stdout
+            assert "[4] Imported2" in res.stdout
+        finally:
+            _stop_postgres(other)
+
+
+def test_import_appends_after_null_order_documents(tmp_path):
+    """Documents created without an order_index still keep their place on import."""
+    from littera.db.workdb import open_work_db
+
+    with init_work(tmp_path) as workdir:
+        add_document(workdir, "Imported1")
+
+        dest = workdir / "payload.json"
+        res = run(f"littera export json -o {dest}", cwd=workdir)
+        assert res.returncode == 0, res.stderr
+
+        other = tmp_path / "other"
+        other.mkdir()
+        res = run("littera init .", cwd=other)
+        assert res.returncode == 0, res.stderr
+        try:
+            add_document(other, "Existing1")
+            add_document(other, "Existing2")
+            with open_work_db(other) as db:
+                db.conn.execute("UPDATE documents SET order_index = NULL")
+                db.conn.commit()
+
+            res = run(f"littera import json {dest}", cwd=other)
+            assert res.returncode == 0, res.stderr
+
+            res = run("littera doc list", cwd=other)
+            assert res.returncode == 0, res.stderr
+            assert "[1] Existing1" in res.stdout
+            assert "[2] Existing2" in res.stdout
+            assert "[3] Imported1" in res.stdout
+        finally:
+            _stop_postgres(other)

@@ -1,6 +1,7 @@
 from textual.containers import Vertical
 from textual.widgets import Static
 
+from littera.tui import keymap
 from littera.tui.state import AppState
 from littera.tui.views.base import View
 
@@ -14,13 +15,9 @@ class EditorView(View):
             title = "Editor"
             text = ""
         else:
-            target = session.target
-            if target.kind == "entity_note":
-                title = f"Note: {target.id}"
-            elif target.kind == "block_text":
-                title = f"Block: {target.id}"
-            else:
-                title = "Editor"
+            # The caller knew what it opened ("Block (en)", "Note: concept
+            # Time"); rendering target.id showed the writer a raw UUID.
+            title = session.title or "Editor"
             text = session.current_text
 
         try:
@@ -32,7 +29,8 @@ class EditorView(View):
 
             editor = Input(value=text or "", id="editor")
 
-        hints = "Ctrl+S:save  Ctrl+Z:undo  Ctrl+Y:redo  Esc:cancel"
+        # Undo/redo here is the text area's own, and only until Ctrl+S.
+        hints = keymap.hint_bar(state)
 
         return [
             Vertical(

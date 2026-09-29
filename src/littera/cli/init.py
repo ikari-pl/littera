@@ -8,6 +8,7 @@ Policy layer:
 """
 
 from pathlib import Path
+
 import yaml
 
 from littera.db.bootstrap import PostgresConfig, bootstrap, ensure_database
@@ -18,7 +19,7 @@ def register(app):
 
     @app.command()
     def init(
-        path: Path = typer.Argument(Path.cwd(), help="Directory for the new work"),
+        path: Path = typer.Argument(Path.cwd(), help="Directory for the new work"),  # noqa: B008 - Typer builds the CLI from defaults
         db_port: int = typer.Option(0, help="Postgres port (0 = auto)"),
     ):
         try:

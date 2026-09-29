@@ -30,7 +30,6 @@ app = typer.Typer(
 @app.callback()
 def main():
     """Work → Document → Section → Block. CLI is the source of truth."""
-    pass
 
 
 # =============================================================================
@@ -84,17 +83,17 @@ app.add_typer(import_app, name="import")
 # Register commands to subgroups
 # =============================================================================
 
-from littera.cli import doc as doc_cmd
-from littera.cli import section as section_cmd
-from littera.cli import block as block_cmd
-from littera.cli import entity as entity_cmd
-from littera.cli import entity_note as entity_note_cmd
-from littera.cli import entity_label as entity_label_cmd
-from littera.cli import entity_property as entity_property_cmd
-from littera.cli import mention as mention_cmd
 from littera.cli import alignment as alignment_cmd
-from littera.cli import review as review_cmd
+from littera.cli import block as block_cmd
+from littera.cli import doc as doc_cmd
+from littera.cli import entity as entity_cmd
+from littera.cli import entity_label as entity_label_cmd
+from littera.cli import entity_note as entity_note_cmd
+from littera.cli import entity_property as entity_property_cmd
 from littera.cli import entity_suggest as entity_suggest_cmd
+from littera.cli import mention as mention_cmd
+from littera.cli import review as review_cmd
+from littera.cli import section as section_cmd
 
 doc_cmd.register(doc_app)
 section_cmd.register(section_app)
@@ -119,11 +118,11 @@ io_cmd.register_snapshot(app)
 # Top-level commands
 # =============================================================================
 
+from littera.cli import inflect as inflect_cmd
 from littera.cli import init as init_cmd
+from littera.cli import mntn_db as mntn_db_cmd
 from littera.cli import status as status_cmd
 from littera.cli import words as words_cmd
-from littera.cli import mntn_db as mntn_db_cmd
-from littera.cli import inflect as inflect_cmd
 
 init_cmd.register(app)
 status_cmd.register(app)
@@ -135,6 +134,25 @@ inflect_cmd.register(app)
 @app.command()
 def tui():
     """Launch the Littera TUI."""
+    from pathlib import Path
+
     from littera.tui.app import LitteraApp
+
+    # Launching outside a work used to render a blank screen with 31 dead keys.
+    littera_dir = Path.cwd() / ".littera"
+    if not littera_dir.exists():
+        typer.secho(
+            "Not a Littera work — run 'littera init <name>' first.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    if not (littera_dir / "config.yml").exists():
+        typer.secho(
+            "Invalid Littera work: .littera/config.yml is missing.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
 
     LitteraApp().run()

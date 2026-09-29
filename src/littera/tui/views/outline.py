@@ -1,6 +1,7 @@
 from textual.containers import Horizontal, Vertical
 from textual.widgets import ListItem, ListView, Static
 
+from littera.tui import keymap
 from littera.tui.state import AppState
 from littera.tui.views.base import View
 
@@ -19,86 +20,88 @@ class OutlineView(View):
             parts.append(elem.title)
         return " > ".join(parts)
 
-    def _get_hints(self, nav_level: str, has_selection: bool) -> str:
-        """Get contextual hints for current navigation level."""
-        base_hints = {
-            "documents": "a:add doc  d:delete  Enter:drill  Esc:back  e:entities  x/X/C:export  i:import",
-            "sections": "a:add sec  d:delete  Enter:drill  Esc:back  Ctrl+E:edit title",
-            "blocks": "a:add blk  d:delete  Enter:edit  l:link entity  Esc:back",
-        }
-        return base_hints.get(nav_level, "a:add  d:delete  Enter:select  Esc:back")
-
     def _get_model_help(self, nav_level: str) -> str:
-        """Get contextual help explaining the mental model."""
+        """Explain the mental model at this level.
+
+        Keys are deliberately absent: the hint bar and `?` are generated from
+        the bindings, and a second hand-written copy here drifted from them.
+        """
         h = self.HELP_STYLE
         e = self.HELP_END
 
-        if nav_level == "documents":
-            return f"""
-{h}─── Littera Structure ───{e}
+        here = {
+            "documents": (
+                "Document    ← you are here",
+                (
+                    "Documents group sections together.",
+                    "Each document is a standalone piece",
+                    "— an article, essay, or chapter.",
+                ),
+            ),
+            "sections": (
+                "Section    ← you are here",
+                (
+                    "Sections divide a document.",
+                    "Each section is a logical part",
+                    "— a subchapter, scene, or argument.",
+                ),
+            ),
+            "blocks": (
+                "Block    ← you are here",
+                (
+                    "Blocks are text fragments.",
+                    "Each block has a language (en/pl/...)",
+                    "and can be linked to an Entity.",
+                ),
+            ),
+        }
+        if nav_level not in here:
+            return ""
 
-{h}Work{e}
-{h}  └─ Document    ← you are here{e}
-{h}       └─ Section{e}
-{h}            └─ Block{e}
+        marked, prose = here[nav_level]
+        levels = [
+            ("Work", 0),
+            ("Document", 1),
+            ("Section", 2),
+            ("Block", 3),
+        ]
+        lines = [f"{h}─── Littera Structure ───{e}", ""]
+        for label, depth in levels:
+            text = marked if marked.startswith(label) else label
+            indent = "  " * depth + ("└─ " if depth else "")
+            lines.append(f"{h}{indent}{text}{e}")
+        lines.append("")
+        lines.extend(f"{h}{line}{e}" for line in prose)
+        return "\n" + "\n".join(lines) + "\n"
 
-{h}Documents group sections together.{e}
-{h}Each document is a standalone piece{e}
-{h}— an article, essay, or chapter.{e}
+    def detail_text(self, state: AppState) -> str:
+        """Detail pane text: pre-loaded detail, else the model help / empty state."""
+        nav_level = state.nav_level
+        model_help = self._get_model_help(nav_level)
 
-{h}─────────────────────────{e}
-{h}Enter  — drill into document{e}
-{h}a      — add new document{e}
-{h}e      — switch to Entities{e}
-{h}x / X  — export JSON / Markdown{e}
-{h}C      — compile manuscript Markdown{e}
-{h}i      — import JSON{e}
-"""
+        if state.outline.detail:
+            return state.outline.detail
+        if not state.outline.items:
+            if not state.path:
+                return f"No documents yet.\nPress 'a' to add one.\n{model_help}"
+            last = state.path[-1]
+            return (
+                f"No {nav_level} in '{last.title}' yet.\n"
+                f"Press 'a' to add one.\n{model_help}"
+            )
+        return model_help
 
-        elif nav_level == "sections":
-            return f"""
-{h}─── Littera Structure ───{e}
-
-{h}Work{e}
-{h}  └─ Document{e}
-{h}       └─ Section    ← you are here{e}
-{h}            └─ Block{e}
-
-{h}Sections divide a document.{e}
-{h}Each section is a logical part{e}
-{h}— a subchapter, scene, or argument.{e}
-
-{h}─────────────────────────{e}
-{h}Enter  — drill into section{e}
-{h}Ctrl+E — edit title{e}
-{h}Esc    — back to documents{e}
-"""
-
-        elif nav_level == "blocks":
-            return f"""
-{h}─── Littera Structure ───{e}
-
-{h}Work{e}
-{h}  └─ Document{e}
-{h}       └─ Section{e}
-{h}            └─ Block    ← you are here{e}
-
-{h}Blocks are text fragments.{e}
-{h}Each block has a language (en/pl/...){e}
-{h}and can be linked to an Entity.{e}
-
-{h}─────────────────────────{e}
-{h}Enter  — edit block text{e}
-{h}l      — link to Entity{e}
-{h}Esc    — back to sections{e}
-"""
-
-        return ""
+    def selected_index(self, state: AppState) -> int:
+        selected_id = state.outline.selection.id
+        if not selected_id:
+            return 0
+        for i, item in enumerate(state.outline.items):
+            if item.id == selected_id:
+                return i
+        return 0
 
     def render(self, state: AppState):
         """Pure render from state.outline.items and state.outline.detail."""
-        nav_level = state.nav_level
-        model_help = self._get_model_help(nav_level)
 
         # Build list items from pre-loaded state
         items: list[ListItem] = []
@@ -114,26 +117,16 @@ class OutlineView(View):
                 display = f"{label}  {outline_item.title}"
             items.append(ListItem(Static(display), id=f"{prefix}-{outline_item.id}"))
 
-        # Detail: use pre-loaded detail, fall back to model help
-        if state.outline.detail:
-            detail = state.outline.detail
-        elif not items:
-            if not state.path:
-                detail = f"No documents yet.\nPress 'a' to add one.\n{model_help}"
-            else:
-                last = state.path[-1]
-                detail = f"No {nav_level} in '{last.title}' yet.\nPress 'a' to add one.\n{model_help}"
-        else:
-            detail = model_help
+        detail = self.detail_text(state)
 
         breadcrumb = self._build_breadcrumb(state)
-        hints = self._get_hints(state.nav_level, bool(state.entity_selection.id))
+        hints = keymap.hint_bar(state)
 
         return [
             Vertical(
                 Static(breadcrumb, id="breadcrumb"),
                 Horizontal(
-                    ListView(*items, id="nav"),
+                    ListView(*items, id="nav", initial_index=self.selected_index(state)),
                     Static(detail, id="detail"),
                     id="outline-layout",
                 ),

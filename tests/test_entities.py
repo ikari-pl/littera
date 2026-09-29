@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from test_invariants import run, init_work, add_document, add_section, add_block
-
+from test_invariants import add_block, add_document, add_section, init_work, run
 
 # --- entity invariants ---------------------------------------
 

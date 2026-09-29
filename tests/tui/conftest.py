@@ -17,6 +17,7 @@ import yaml
 
 from littera.db.bootstrap import PostgresConfig, start_postgres, stop_postgres
 from littera.db.embedded_pg import EmbeddedPostgresManager
+from littera.tui.app import LitteraApp
 from littera.tui.state import AppState
 
 
@@ -32,6 +33,7 @@ def _run_cli(cmd: str, cwd: Path) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         env={**os.environ, "PATH": os.environ.get("PATH", "")},
+        check=False,
     )
 
 
@@ -81,7 +83,7 @@ def seeded_work(tmp_path_factory):
 @pytest.fixture
 def tui_state(seeded_work):
     """Per-test: fresh AppState connected to seeded DB."""
-    workdir, cfg, pg_cfg = seeded_work
+    _workdir, cfg, pg_cfg = seeded_work
 
     conn = psycopg.connect(dbname=pg_cfg.db_name, port=pg_cfg.port)
 
@@ -98,7 +100,7 @@ def tui_state(seeded_work):
 @pytest.fixture
 def seeded_ids(seeded_work):
     """Per-test: look up real UUIDs of seeded data."""
-    _, cfg, pg_cfg = seeded_work
+    _, _cfg, pg_cfg = seeded_work
 
     conn = psycopg.connect(dbname=pg_cfg.db_name, port=pg_cfg.port)
 
@@ -142,3 +144,29 @@ def seeded_ids(seeded_work):
         "ent1_id": str(ents[0][0]),
         "ent2_id": str(ents[1][0]),
     }
+
+
+@pytest.fixture
+def pilot_app(seeded_work, monkeypatch):
+    """A real LitteraApp bound to the seeded work, ready for `app.run_test()`.
+
+    LitteraApp.on_mount resolves the work from `Path.cwd() / ".littera"`
+    (see app.py `_load_cfg`), so the honest way to bind the app to the seeded
+    work is to run the test from that directory. No internals are patched.
+
+    The session fixture already started Postgres, so `start_postgres` inside
+    `on_mount` returns False and the app will not stop the cluster on unmount.
+    """
+    workdir, _cfg, _pg_cfg = seeded_work
+    monkeypatch.chdir(workdir)
+    return LitteraApp()
+
+
+async def settle(pilot, times: int = 3) -> None:
+    """Let Textual flush pending messages and the exclusive render worker.
+
+    `_render_view` schedules an async worker, so a single `pause()` is not
+    enough to observe the rebuilt DOM.
+    """
+    for _ in range(times):
+        await pilot.pause()

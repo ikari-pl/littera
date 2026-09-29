@@ -12,11 +12,10 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
-import uuid
 from pathlib import Path
 
 import typer
-from littera.cli import entity_note
+
 from littera.db.workdb import open_work_db
 
 
@@ -33,6 +32,7 @@ def run_cli(app: typer.Typer, cmd: str, cwd: Path) -> str:
         capture_output=True,
         text=True,
         env={**os.environ, "PATH": os.environ.get("PATH", ""), "LITTERA_PG_LEASE_SECONDS": "0"},
+        check=False,
     ).stdout
 
 
@@ -68,7 +68,10 @@ def test_block_edit_cli_via_fallback(tmp_path: Path) -> None:
         input="New\n",
         capture_output=True,
         text=True,
-        env={"EDITOR": "", "LITTERA_PG_LEASE_SECONDS": "0"},
+        # Inherit the environment: replacing it wipes PATH, and psycopg then
+        # cannot find libpq in the subprocess.
+        env={**os.environ, "EDITOR": "", "LITTERA_PG_LEASE_SECONDS": "0"},
+        check=False,
     )
     assert result.returncode == 0
     out = run_cli(app, "littera block list 1", workdir)
@@ -95,7 +98,6 @@ def test_block_create_delete_cli(tmp_path: Path) -> None:
 
 def test_block_create_with_uuid_selector(tmp_path: Path) -> None:
     """Test that block add works with UUID string selectors (regression test)."""
-    import re
 
     workdir = tmp_path / "work"
     workdir.mkdir()
@@ -118,23 +120,6 @@ def test_block_create_with_uuid_selector(tmp_path: Path) -> None:
     assert "UUID test block" in out
 
 
-def test_undo_redo_flow(tmp_path: Path) -> None:
-    from littera.tui.undo import UndoRedo, EditTarget
-
-    undo = UndoRedo()
-    target = EditTarget(kind="block_text", id=str(uuid.uuid4()))
-
-    assert not undo.can_undo()
-    assert not undo.can_redo()
-    undo.record(target, "a", "b")
-    assert undo.can_undo()
-    assert not undo.can_redo()
-    assert undo.pop_undo() is not None
-    assert undo.pop_undo() is None
-    assert undo.can_redo()
-    assert undo.pop_redo() is not None
-
-
 if __name__ == "__main__":
     import tempfile
 
@@ -143,5 +128,4 @@ if __name__ == "__main__":
         test_entity_note_cli_roundtrip(Path(td))
         test_block_edit_cli_via_fallback(Path(td))
         test_block_create_delete_cli(Path(td))
-        test_undo_redo_flow(Path(td))
     print("Phase 1 unit tests passed")

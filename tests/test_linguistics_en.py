@@ -5,11 +5,8 @@ Unit tests (no DB) covering nouns, verbs, adjectives, overrides, and dispatch.
 
 import json
 
-import pytest
-
-from littera.linguistics.en import surface_form
 from littera.linguistics.dispatch import surface_form as dispatch_surface_form
-
+from littera.linguistics.en import surface_form
 
 # ── Noun plurals: regular ────────────────────────────────────────────────────
 

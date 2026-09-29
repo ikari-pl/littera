@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.request
 import urllib.error
+import urllib.request
 
 
 def suggest_label(
@@ -65,7 +65,7 @@ def _call_llm(backend: str, system_prompt: str, user_prompt: str) -> str | None:
             )
         else:
             return None
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional LLM backend: any failure falls back to no suggestion
         return None
 
 

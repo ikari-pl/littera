@@ -6,11 +6,11 @@ All concrete decisions (ports, database names, binaries)
 come from configuration passed in by the CLI layer.
 """
 
-from pathlib import Path
-from dataclasses import dataclass
+import os
 import shutil
 import subprocess
-import os
+from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -67,13 +67,20 @@ def start_postgres(cfg: PostgresConfig) -> bool:
     pid_file = cfg.data_dir / "postmaster.pid"
     if pid_file.exists():
         try:
-            pid = int(pid_file.read_text().splitlines()[0])
+            lines = pid_file.read_text().splitlines()
+            if not lines:
+                # An empty pid file is a crash leftover, not a running server.
+                raise ValueError("empty postmaster.pid")
+            pid = int(lines[0])
             os.kill(pid, 0)
             # ✅ Postgres is already running
             return False
-        except (ValueError, ProcessLookupError, PermissionError):
-            # Stale PID file
-            pid_file.unlink()
+        except (ValueError, IndexError, ProcessLookupError, PermissionError, OSError):
+            # Stale, empty, or unreadable PID file.
+            try:
+                pid_file.unlink()
+            except OSError:
+                pass
 
     log_file = cfg.data_dir / "postgres.log"
     try:

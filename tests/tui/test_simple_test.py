@@ -1,16 +1,8 @@
+"""Smoke test: the TUI state module imports cleanly."""
+
+
 def test_simple_import():
-    """Test that imports work."""
+    """AppState must be importable; a broken import should fail the suite."""
+    from littera.tui.state import AppState
 
-    try:
-        from littera.tui.state import AppState
-
-        return True
-    except ImportError as e:
-        print(f"❌ ImportError: {e}")
-        return False
-
-
-if __name__ == "__main__":
-    test_simple_import()
-
-    print("Testing complete")
+    assert AppState is not None

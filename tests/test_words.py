@@ -3,8 +3,9 @@
 Real embedded Postgres. No mocks.
 """
 
-from littera.cli.words import count_words, visible_text
 from test_invariants import add_block, add_document, add_section, init_work, run
+
+from littera.cli.words import count_words, visible_text
 
 
 def test_visible_text_strips_mention_markup():
