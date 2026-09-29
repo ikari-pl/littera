@@ -16,10 +16,15 @@ import typer
 
 from littera.cli.block import SIBLING_ORDER_SQL
 from littera.db.workdb import open_work_db
+from littera.domain import guards
 
 # =========================================================================
 # Shared export logic (used by CLI and desktop sidecar)
 # =========================================================================
+
+
+def _jsonb(value) -> str | None:
+    return json.dumps(value) if value is not None else None
 
 
 def export_work_json(conn) -> dict:
@@ -36,20 +41,21 @@ def export_work_json(conn) -> dict:
 
     # Documents with sections and blocks
     cur.execute(
-        "SELECT id, title, order_index FROM documents WHERE work_id = %s "
+        "SELECT id, title, order_index, metadata FROM documents WHERE work_id = %s "
         f"ORDER BY {SIBLING_ORDER_SQL}",
         (work_id,),
     )
     documents = []
-    for doc_id, doc_title, doc_order in cur.fetchall():
+    for doc_id, doc_title, doc_order, doc_meta in cur.fetchall():
         cur.execute(
-            "SELECT id, title, order_index FROM sections WHERE document_id = %s ORDER BY order_index",
+            "SELECT id, title, order_index, metadata FROM sections "
+            "WHERE document_id = %s ORDER BY order_index",
             (doc_id,),
         )
         sections = []
-        for sec_id, sec_title, order_idx in cur.fetchall():
+        for sec_id, sec_title, order_idx, sec_meta in cur.fetchall():
             cur.execute(
-                "SELECT id, block_type, language, source_text, order_index "
+                "SELECT id, block_type, language, source_text, order_index, metadata "
                 f"FROM blocks WHERE section_id = %s ORDER BY {SIBLING_ORDER_SQL}",
                 (sec_id,),
             )
@@ -60,14 +66,16 @@ def export_work_json(conn) -> dict:
                     "language": lang,
                     "source_text": text,
                     "order_index": order_idx,
+                    "metadata": meta,
                 }
-                for bid, btype, lang, text, order_idx in cur.fetchall()
+                for bid, btype, lang, text, order_idx, meta in cur.fetchall()
             ]
             sections.append(
                 {
                     "id": str(sec_id),
                     "title": sec_title,
                     "order_index": order_idx,
+                    "metadata": sec_meta,
                     "blocks": blocks,
                 }
             )
@@ -76,6 +84,7 @@ def export_work_json(conn) -> dict:
                 "id": str(doc_id),
                 "title": doc_title,
                 "order_index": doc_order,
+                "metadata": doc_meta,
                 "sections": sections,
             }
         )
@@ -87,12 +96,22 @@ def export_work_json(conn) -> dict:
     entities = []
     for eid, etype, canonical, props in cur.fetchall():
         cur.execute(
-            "SELECT language, base_form FROM entity_labels WHERE entity_id = %s ORDER BY language",
+            "SELECT language, base_form, aliases FROM entity_labels "
+            "WHERE entity_id = %s ORDER BY language",
             (eid,),
         )
-        labels = [
-            {"language": lang, "base_form": bf} for lang, bf in cur.fetchall()
-        ]
+        labels = []
+        for lang, bf, aliases in cur.fetchall():
+            label = {"language": lang, "base_form": bf}
+            if aliases:
+                label["aliases"] = aliases
+            labels.append(label)
+        # Entities are global; their overlay for this work (notes, ...) is not.
+        cur.execute(
+            "SELECT metadata FROM entity_work_metadata WHERE entity_id = %s AND work_id = %s",
+            (eid, work_id),
+        )
+        overlay = cur.fetchone()
         entities.append(
             {
                 "id": str(eid),
@@ -100,6 +119,7 @@ def export_work_json(conn) -> dict:
                 "canonical_label": canonical,
                 "properties": props,
                 "labels": labels,
+                "work_metadata": overlay[0] if overlay else None,
             }
         )
 
@@ -120,20 +140,25 @@ def export_work_json(conn) -> dict:
 
     # Alignments
     cur.execute(
-        "SELECT source_block_id, target_block_id, alignment_type FROM block_alignments ORDER BY created_at"
+        "SELECT id, source_block_id, target_block_id, alignment_type, confidence "
+        "FROM block_alignments ORDER BY created_at"
     )
     alignments = [
         {
+            # The id lets an alignment-scoped review find its target on import.
+            "id": str(aid),
             "source_block_id": str(src),
             "target_block_id": str(tgt),
             "alignment_type": atype,
+            "confidence": float(conf) if conf is not None else None,
         }
-        for src, tgt, atype in cur.fetchall()
+        for aid, src, tgt, atype, conf in cur.fetchall()
     ]
 
     # Reviews
     cur.execute(
-        "SELECT description, severity, scope, issue_type FROM reviews WHERE work_id = %s ORDER BY created_at",
+        "SELECT description, severity, scope, scope_id, issue_type, metadata "
+        "FROM reviews WHERE work_id = %s ORDER BY created_at",
         (work_id,),
     )
     reviews = [
@@ -141,9 +166,11 @@ def export_work_json(conn) -> dict:
             "description": desc,
             "severity": sev,
             "scope": scope,
+            "scope_id": str(scope_id) if scope_id else None,
             "issue_type": itype,
+            "metadata": meta,
         }
-        for desc, sev, scope, itype in cur.fetchall()
+        for desc, sev, scope, scope_id, itype, meta in cur.fetchall()
     ]
 
     return {
@@ -287,11 +314,26 @@ def import_work_json(conn, data: dict) -> dict:
                 )
                 if not cur.fetchone():
                     cur.execute(
-                        "INSERT INTO entity_labels (id, entity_id, language, base_form) "
-                        "VALUES (%s, %s, %s, %s)",
-                        (str(uuid.uuid4()), resolved_eid, lang, bf),
+                        "INSERT INTO entity_labels (id, entity_id, language, base_form, aliases) "
+                        "VALUES (%s, %s, %s, %s, %s)",
+                        (str(uuid.uuid4()), resolved_eid, lang, bf, _jsonb(label.get("aliases"))),
                     )
                     counts["labels"] += 1
+
+        # This work's overlay (notes, ...). Merged like every other writer, so
+        # importing never erases keys the work already had for this entity.
+        overlay = ent.get("work_metadata")
+        if overlay:
+            cur.execute(
+                """
+                INSERT INTO entity_work_metadata (entity_id, work_id, metadata)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (entity_id, work_id)
+                DO UPDATE SET metadata =
+                    COALESCE(entity_work_metadata.metadata, '{}'::jsonb) || EXCLUDED.metadata
+                """,
+                (resolved_eid, work_id, json.dumps(overlay)),
+            )
 
     # --- Documents, Sections, Blocks ---
     # Import appends: existing documents keep the order the user already sees
@@ -311,7 +353,11 @@ def import_work_json(conn, data: dict) -> dict:
         )
     doc_order_offset = len(existing_doc_ids)
 
-    block_id_map: dict[str, str] = {}  # old_id -> new_id
+    # old_id -> new_id, so references (mentions, alignments, review scopes)
+    # follow the rows they point at.
+    doc_id_map: dict[str, str] = {}
+    sec_id_map: dict[str, str] = {}
+    block_id_map: dict[str, str] = {}
     for doc_idx, doc in enumerate(work_data.get("documents", []), 1):
         doc_old_id = doc.get("id")
         doc_new_id = doc_old_id or str(uuid.uuid4())
@@ -324,10 +370,11 @@ def import_work_json(conn, data: dict) -> dict:
             doc_order = doc_idx
         doc_order += doc_order_offset
         cur.execute(
-            "INSERT INTO documents (id, work_id, title, order_index) "
-            "VALUES (%s, %s, %s, %s)",
-            (doc_new_id, work_id, doc.get("title"), doc_order),
+            "INSERT INTO documents (id, work_id, title, order_index, metadata) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (doc_new_id, work_id, doc.get("title"), doc_order, _jsonb(doc.get("metadata"))),
         )
+        doc_id_map[doc_old_id] = doc_new_id
         counts["documents"] += 1
 
         for sec_idx, sec in enumerate(doc.get("sections", []), 1):
@@ -340,10 +387,11 @@ def import_work_json(conn, data: dict) -> dict:
             if sec_order is None:
                 sec_order = sec_idx
             cur.execute(
-                "INSERT INTO sections (id, document_id, title, order_index) "
-                "VALUES (%s, %s, %s, %s)",
-                (sec_new_id, doc_new_id, sec.get("title"), sec_order),
+                "INSERT INTO sections (id, document_id, title, order_index, metadata) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (sec_new_id, doc_new_id, sec.get("title"), sec_order, _jsonb(sec.get("metadata"))),
             )
+            sec_id_map[sec_old_id] = sec_new_id
             counts["sections"] += 1
 
             for idx, blk in enumerate(sec.get("blocks", []), 1):
@@ -356,8 +404,9 @@ def import_work_json(conn, data: dict) -> dict:
                 if order_index is None:
                     order_index = idx
                 cur.execute(
-                    "INSERT INTO blocks (id, section_id, block_type, language, source_text, order_index) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO blocks "
+                    "(id, section_id, block_type, language, source_text, order_index, metadata) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (
                         blk_new_id,
                         sec_new_id,
@@ -365,6 +414,7 @@ def import_work_json(conn, data: dict) -> dict:
                         blk.get("language", "en"),
                         blk.get("source_text", ""),
                         order_index,
+                        _jsonb(blk.get("metadata")),
                     ),
                 )
                 block_id_map[blk_old_id] = blk_new_id
@@ -392,30 +442,53 @@ def import_work_json(conn, data: dict) -> dict:
         counts["mentions"] += 1
 
     # --- Alignments ---
+    alignment_id_map: dict[str, str] = {}
     for a in work_data.get("alignments", []):
         old_src = a.get("source_block_id")
         old_tgt = a.get("target_block_id")
         src_id = block_id_map.get(old_src, old_src)
         tgt_id = block_id_map.get(old_tgt, old_tgt)
+        new_id = str(uuid.uuid4())
         cur.execute(
-            "INSERT INTO block_alignments (id, source_block_id, target_block_id, alignment_type) "
-            "VALUES (%s, %s, %s, %s)",
-            (str(uuid.uuid4()), src_id, tgt_id, a.get("alignment_type", "translation")),
+            "INSERT INTO block_alignments "
+            "(id, source_block_id, target_block_id, alignment_type, confidence) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (new_id, src_id, tgt_id, a.get("alignment_type", "translation"), a.get("confidence")),
         )
+        if a.get("id"):
+            alignment_id_map[a["id"]] = new_id
         counts["alignments"] += 1
 
     # --- Reviews ---
+    scope_id_maps = {
+        "document": doc_id_map,
+        "section": sec_id_map,
+        "block": block_id_map,
+        "entity": entity_id_map,
+        "alignment": alignment_id_map,
+    }
     for r in work_data.get("reviews", []):
+        scope, scope_id = r.get("scope"), r.get("scope_id")
+        if scope == "work":
+            scope_id = str(work_id) if scope_id else None
+        elif scope_id:
+            scope_id = scope_id_maps.get(scope, {}).get(scope_id, scope_id)
+        # reviews.scope_id has no foreign key; the same guard as every other
+        # writer refuses an archive whose review points at nothing.
+        guards.ensure_review_scope(cur, scope, scope_id)
         cur.execute(
-            "INSERT INTO reviews (id, work_id, description, severity, scope, issue_type) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            "INSERT INTO reviews "
+            "(id, work_id, description, severity, scope, scope_id, issue_type, metadata) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 str(uuid.uuid4()),
                 work_id,
                 r.get("description"),
                 r.get("severity", "medium"),
-                r.get("scope"),
+                scope,
+                scope_id,
                 r.get("issue_type"),
+                _jsonb(r.get("metadata")),
             ),
         )
         counts["reviews"] += 1
