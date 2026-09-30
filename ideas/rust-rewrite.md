@@ -244,7 +244,7 @@ They should produce identical output.
 
 **Do:**
 1. Implement entity commands: `entity add`, `entity list`, `entity delete`
-2. Entity labels: `entity label-add`, `entity label-delete`
+2. Entity labels: `entity label-add` (with `--alias`), `entity label-alias-remove`, `entity label-delete`
 3. Entity properties: `entity property-set`, `entity property-delete`
    - Properties are JSONB in PG, stored as JSON TEXT in libSQL
    - Use `serde_json::Value` for dynamic JSON manipulation

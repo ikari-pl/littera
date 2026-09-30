@@ -1,24 +1,28 @@
 """Convert a folder of Markdown chapter files into a Littera import JSON.
 
-    python scripts/markdown_book_to_littera.py CHAPTER_DIR OUT.json [--title T]
+    python scripts/markdown_book_to_littera.py CHAPTER_DIR OUT.json \\
+        [--document "Book One"] [--entities FILE.yaml]
 
 Then, inside an initialised work:
 
     littera import json OUT.json
 
-Mapping (one Work, the one you import into):
+Mapping, following MANIFESTO.md (Work -> Document -> Section -> Block):
 
-- each ``*.md`` file            -> Document; ``# Chapter N: Title`` gives the
-                                   title ("Title") and the order (N)
-- a date/subtitle line straight
-  after the chapter heading
-  (``*...*``, ``**...**``, ``## ...``) -> title of the first Section
-- ``## ...`` later in the chapter -> starts a new Section with that title
-- ``---`` / ``***`` / ``* * *``   -> starts a new, untitled Section
-- each blank-line-separated
-  paragraph                      -> ``paragraph`` Block, text kept verbatim
-                                   (inline Markdown included)
+- the folder                     -> one Document (``--document``): a book is
+                                    one coherent piece, not one per file
+- each ``*.md`` chapter file     -> Section; ``# Chapter N: Title`` gives the
+                                    title ("Title") and the order (N)
+- each scene (text between
+  ``---`` / ``***`` / ``* * *``) -> Block holding all of its paragraphs
+                                    verbatim, inline Markdown included
 
+Blocks are units of meaning, not paragraphs (INVARIANTS.md lists "treating
+paragraphs, pages, or files as atomic units" as a violation). A scene is what
+a mention or a review points at.
+
+Date lines and mid-chapter date headings stay where the author put them, at
+the top of the scene they introduce, so a compiled manuscript prints them.
 The chapter number is not kept in the title: order carries it, and a stored
 number would go stale the first time a chapter moves.
 
@@ -31,9 +35,9 @@ makes them. An entity with a ``review`` rule also gets a block-scoped review
 on each block that mentions it. See the header of the example manifest for
 the format.
 
-Nothing is dropped silently. The script fails if the words it wrote differ
-from the words in the source, ignoring only the ``Chapter N:`` prefixes,
-heading markers and scene-break lines it consumed.
+Nothing is dropped silently. The script fails unless the blocks and titles
+hold exactly the words of the source, minus the ``Chapter N:`` prefixes and
+the scene-break lines it turned into structure.
 """
 
 from __future__ import annotations
@@ -48,10 +52,14 @@ from pathlib import Path
 import yaml
 
 CHAPTER_HEADING = re.compile(r"^#\s+(?:Chapter\s+(\d+)\s*[:.\-–—]\s*)?(.+?)\s*$")
-SUBHEADING = re.compile(r"^#{2,6}\s+(.+?)\s*$")
 SCENE_BREAK = re.compile(r"^\s*(?:-{3,}|\*{3,}|(?:\*\s*){3,}|_{3,})\s*$")
+HEADING_LINE = re.compile(r"^#{2,6}\s+\S")
 EMPHASISED_LINE = re.compile(r"^(\*{1,2}|_{1,2})(?!\s)(.+?)(?<!\s)\1$")
 FILE_NUMBER = re.compile(r"(\d+)")
+
+
+def _is_chapter_heading(line: str) -> bool:
+    return line.startswith("# ") and CHAPTER_HEADING.match(line) is not None
 
 
 def _paragraphs(lines: list[str]) -> list[str]:
@@ -67,80 +75,57 @@ def _paragraphs(lines: list[str]) -> list[str]:
     return paras
 
 
+def _is_dateline(paragraph: str) -> bool:
+    """A lone heading or emphasised line: it introduces a scene, it is not one."""
+    line = paragraph.strip()
+    return "\n" not in line and (
+        HEADING_LINE.match(line) is not None or EMPHASISED_LINE.match(line) is not None
+    )
+
+
 def convert_chapter(path: Path) -> tuple[int | None, dict]:
-    """Return (chapter number or None, document dict) for one file."""
+    """Return (chapter number or None, section dict) for one chapter file."""
     lines = path.read_text(encoding="utf-8").splitlines()
 
-    number, title = None, path.stem
-    body_start = 0
+    number, title, body_start = None, path.stem, 0
     for i, line in enumerate(lines):
         if not line.strip():
             continue
-        m = CHAPTER_HEADING.match(line)
-        if m and not line.startswith("##"):
+        if _is_chapter_heading(line):
+            m = CHAPTER_HEADING.match(line)
             number = int(m.group(1)) if m.group(1) else None
             title = m.group(2)
             body_start = i + 1
         break
 
-    sections: list[dict] = []
-    pending_title: str | None = None
-    chunk: list[str] = []
-    at_chapter_start = True
-
-    def flush() -> None:
-        nonlocal pending_title, chunk
-        paras = _paragraphs(chunk)
-        chunk = []
-        if not paras and pending_title is None:
-            return
-        sections.append(
-            {
-                "title": pending_title,
-                "blocks": [
-                    {"block_type": "paragraph", "language": "en", "source_text": p}
-                    for p in paras
-                ],
-            }
-        )
-        pending_title = None
-
+    scenes: list[list[str]] = [[]]
     for line in lines[body_start:]:
-        if at_chapter_start and not line.strip():
-            continue
-        if at_chapter_start:
-            at_chapter_start = False
-            m = EMPHASISED_LINE.match(line.strip())
-            if m:
-                pending_title = m.group(2).strip()
-                continue
-        sub = SUBHEADING.match(line)
-        if sub:
-            flush()
-            pending_title = sub.group(1)
-            continue
         if SCENE_BREAK.match(line):
-            # A break right after a subtitle separates the subtitle from its
-            # scene; it does not end an (empty) section.
-            if _paragraphs(chunk) or pending_title is None:
-                flush()
+            scenes.append([])
+        else:
+            scenes[-1].append(line)
+
+    blocks: list[list[str]] = []
+    carried: list[str] = []  # date lines waiting for the scene they introduce
+    for scene in scenes:
+        paras = _paragraphs(scene)
+        if not paras:
             continue
-        chunk.append(line)
-    flush()
+        if all(_is_dateline(p) for p in paras):
+            carried += paras
+            continue
+        blocks.append(carried + paras)
+        carried = []
+    if carried:  # a trailing date with no scene after it is still text
+        blocks.append(carried)
 
-    # A section holding only a title (e.g. "## Date" followed by a break)
-    # gives that title to the scene after it.
-    merged: list[dict] = []
-    for sec in sections:
-        if merged and not merged[-1]["blocks"] and merged[-1]["title"] and sec["title"] is None:
-            sec["title"] = merged.pop()["title"]
-        merged.append(sec)
-
-    return number, {"title": title, "sections": merged}
-
-
-def _words(text: str) -> list[str]:
-    return text.split()
+    return number, {
+        "title": title,
+        "blocks": [
+            {"block_type": "paragraph", "language": "en", "source_text": "\n\n".join(paras)}
+            for paras in blocks
+        ],
+    }
 
 
 def _source_words(path: Path) -> list[str]:
@@ -148,61 +133,45 @@ def _source_words(path: Path) -> list[str]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if SCENE_BREAK.match(line):
             continue
-        m = CHAPTER_HEADING.match(line)
-        if m and not line.startswith("##"):
-            words += _words(m.group(2))
+        if _is_chapter_heading(line):
+            words += CHAPTER_HEADING.match(line).group(2).split()
             continue
-        sub = SUBHEADING.match(line)
-        if sub:
-            words += _words(sub.group(1))
-            continue
-        words += _words(line)
+        words += line.split()
     return words
 
 
-def _written_words(doc: dict) -> list[str]:
-    words = _words(doc["title"])
-    for sec in doc["sections"]:
-        if sec["title"]:
-            words += _words(sec["title"])
-        for blk in sec["blocks"]:
-            words += _words(blk["source_text"])
+def _written_words(section: dict) -> list[str]:
+    words = section["title"].split()
+    for blk in section["blocks"]:
+        words += blk["source_text"].split()
     return words
 
 
-def _strip_emphasis(words: list[str]) -> list[str]:
-    # Section titles lose the *...* that marked them in the source.
-    return [w.strip("*_") for w in words]
-
-
-def convert(chapter_dir: Path, work_title: str) -> dict:
+def convert(chapter_dir: Path, work_title: str, document_title: str) -> dict:
     files = sorted(chapter_dir.glob("*.md"))
     if not files:
         raise SystemExit(f"no .md files in {chapter_dir}")
 
     chapters = []
     for path in files:
-        number, doc = convert_chapter(path)
+        number, section = convert_chapter(path)
         if number is None:
             m = FILE_NUMBER.search(path.stem)
             number = int(m.group(1)) if m else None
-        src = _strip_emphasis(_source_words(path))
-        out = _strip_emphasis(_written_words(doc))
-        if src != out:
+        if _source_words(path) != _written_words(section):
             raise SystemExit(f"{path.name}: converted text does not match the source")
-        chapters.append((number if number is not None else 10**9, path.name, doc))
+        chapters.append((number if number is not None else 10**9, path.name, section))
 
     chapters.sort(key=lambda c: (c[0], c[1]))
-    documents = []
-    for idx, (_, _, doc) in enumerate(chapters, 1):
-        doc["order_index"] = idx
-        for s_idx, sec in enumerate(doc["sections"], 1):
-            sec["order_index"] = s_idx
-            for b_idx, blk in enumerate(sec["blocks"], 1):
-                blk["order_index"] = b_idx
-        documents.append(doc)
+    sections = []
+    for s_idx, (_, _, section) in enumerate(chapters, 1):
+        section["order_index"] = s_idx
+        for b_idx, blk in enumerate(section["blocks"], 1):
+            blk["order_index"] = b_idx
+        sections.append(section)
 
-    return {"work": {"title": work_title, "documents": documents}}
+    document = {"title": document_title, "order_index": 1, "sections": sections}
+    return {"work": {"title": work_title, "documents": [document]}}
 
 
 # =============================================================================
@@ -304,10 +273,12 @@ def main() -> None:
     parser.add_argument("chapter_dir", type=Path)
     parser.add_argument("out", type=Path)
     parser.add_argument("--title", default=None, help="work title (informational)")
+    parser.add_argument("--document", default=None, help="document title (default: work title)")
     parser.add_argument("--entities", type=Path, default=None, help="author's entity manifest (YAML)")
     args = parser.parse_args()
 
-    data = convert(args.chapter_dir, args.title or args.chapter_dir.name)
+    title = args.title or args.chapter_dir.name
+    data = convert(args.chapter_dir, title, args.document or title)
     if args.entities:
         add_semantics(data, yaml.safe_load(args.entities.read_text(encoding="utf-8")) or [])
     args.out.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")

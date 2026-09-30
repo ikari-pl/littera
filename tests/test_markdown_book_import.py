@@ -45,7 +45,7 @@ Only scene.
 """
 
 
-def test_chapters_become_documents_sections_and_blocks(tmp_path):
+def test_book_becomes_one_document_of_chapter_sections_and_scene_blocks(tmp_path):
     chapters = tmp_path / "chapters"
     chapters.mkdir()
     # Named so that a plain filename sort would put chapter 10 first.
@@ -54,41 +54,48 @@ def test_chapters_become_documents_sections_and_blocks(tmp_path):
     out = tmp_path / "book.json"
 
     res = subprocess.run(
-        [sys.executable, str(SCRIPT), str(chapters), str(out)],
+        [sys.executable, str(SCRIPT), str(chapters), str(out), "--document", "Book One"],
         capture_output=True,
         text=True,
         check=False,
     )
     assert res.returncode == 0, res.stderr
-    assert "2 documents, 4 sections, 6 blocks" in res.stderr
+    # Chapter 2: the date line joins the first scene; three scenes. Chapter 10: one.
+    assert "1 documents, 2 sections, 4 blocks" in res.stderr
 
     with init_work(tmp_path) as workdir:
         res = run(f"littera import json {out}", cwd=workdir)
         assert res.returncode == 0, res.stderr
 
+        # One coherent piece: the book is a document, not one per file.
         res = run("littera doc list", cwd=workdir)
         assert res.returncode == 0, res.stderr
-        assert res.stdout.index("The Second") < res.stdout.index("The Tenth")
-        assert "Chapter" not in res.stdout
+        assert "Book One" in res.stdout
+        assert "The Second" not in res.stdout
 
+        # Chapters are sections, in chapter order, without "Chapter N".
         res = run("littera section list 1", cwd=workdir)
         assert res.returncode == 0, res.stderr
-        assert "[1] March 3, 2025" in res.stdout
-        assert "[3] March 4, 2025" in res.stdout
-        assert "*" not in res.stdout
+        assert "[1] The Second" in res.stdout
+        assert "[2] The Tenth" in res.stdout
+        assert "Chapter" not in res.stdout
 
-        # The raw export shows block text as stored: inline Markdown kept,
-        # scene breaks consumed as structure rather than copied as text.
+        # A block is a whole scene: several paragraphs, text kept verbatim,
+        # date lines at the top of the scene they introduce.
         res = run("littera export markdown", cwd=workdir)
         assert res.returncode == 0, res.stderr
         exported = res.stdout
-        assert "[en] First scene, *first* paragraph." in exported
-        assert "[en] - a list item\n- another item" in exported
+        assert (
+            "[en] *March 3, 2025*\n\nFirst scene, *first* paragraph."
+            "\n\nFirst scene, second paragraph."
+        ) in exported
+        assert "[en] Second scene.\n\n- a list item\n- another item" in exported
+        assert "[en] ## March 4, 2025\n\nThird scene, dated." in exported
         assert "---" not in exported
 
         res = run("littera wc", cwd=workdir)
         assert res.returncode == 0, res.stderr
-        assert "(work, 6 blocks)" in res.stdout
+        assert "(work, 4 blocks)" in res.stdout
 
 
 MANIFEST = """
@@ -110,9 +117,15 @@ MANIFEST = """
 
 CHAPTER_WITH_ENTITIES = """# Chapter 1: Visit
 
-Ally's train left Warsaw at noon.
+Ally's train left Warsaw at noon. Warsaw was grey.
+
+---
 
 Nobody in Warsaw noticed. Alice did.
+
+---
+
+Skawina is not named here, but it exists.
 """
 
 
@@ -131,7 +144,7 @@ def test_entity_manifest_becomes_entities_mentions_and_reviews(tmp_path):
         check=False,
     )
     assert res.returncode == 0, res.stderr
-    assert "3 entities, 4 mentions, 2 reviews" in res.stderr
+    assert "3 entities, 5 mentions, 2 reviews" in res.stderr
 
     with init_work(tmp_path) as workdir:
         res = run(f"littera import json {out}", cwd=workdir)
@@ -157,7 +170,7 @@ def test_entity_manifest_becomes_entities_mentions_and_reviews(tmp_path):
         assert res.stdout.count("place: Warsaw") == 2
         res = run("littera export json", cwd=workdir)
         exported = res.stdout[res.stdout.index("{"):]
-        assert "Ally's train left Warsaw at noon." in exported
+        assert "Ally's train left Warsaw at noon. Warsaw was grey." in exported
         assert "{@" not in exported
         assert '"case": "poss"' in exported
 

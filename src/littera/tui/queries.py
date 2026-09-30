@@ -22,6 +22,18 @@ from littera.tui.state import (
 # Outline
 # =============================================================================
 
+UNTITLED = "(untitled)"
+
+
+def display_title(title: str | None) -> str:
+    """How a document or section title reads on screen.
+
+    NULL is a real title, not an error: a scene break in a manuscript has no
+    heading. It is shown as "(untitled)" and never stored that way.
+    """
+    return title if title and title.strip() else UNTITLED
+
+
 def refresh_outline(state: AppState) -> None:
     """Populate state.outline.items and state.outline.detail from DB."""
     items: list[OutlineItem] = []
@@ -76,7 +88,7 @@ def _outline_detail(cur, sel, conn) -> str:
     if sel.kind == "document":
         cur.execute("SELECT title FROM documents WHERE id = %s", (raw_id,))
         row = cur.fetchone()
-        title = row[0] if row else raw_id
+        title = display_title(row[0]) if row else raw_id
         cur.execute(
             "SELECT COUNT(*) FROM sections WHERE document_id = %s",
             (raw_id,),
@@ -91,7 +103,7 @@ def _outline_detail(cur, sel, conn) -> str:
     elif sel.kind == "section":
         cur.execute("SELECT title FROM sections WHERE id = %s", (raw_id,))
         row = cur.fetchone()
-        title = row[0] if row else raw_id
+        title = display_title(row[0]) if row else raw_id
         cur.execute(
             "SELECT COUNT(*) FROM blocks WHERE section_id = %s",
             (raw_id,),
@@ -269,7 +281,7 @@ def _entity_detail(cur, entity_id: str, work: dict | None) -> str:
         ) in mentions:
             preview = text.replace("\n", " ")[:60]
             detail_lines.append(
-                f"  - {doc_title} / {sec_title} ({lang}) {preview}"
+                f"  - {display_title(doc_title)} / {display_title(sec_title)} ({lang}) {preview}"
             )
     else:
         detail_lines.append("Mentions:")
@@ -347,7 +359,7 @@ def scope_target_label(cur, scope: str | None, scope_id) -> str | None:
         return "(deleted)"
     value = (row[0] or "").replace("\n", " ").strip()
     if not value:
-        return "(untitled)"
+        return UNTITLED
     return value[:60] + ("…" if len(value) > 60 else "")
 
 

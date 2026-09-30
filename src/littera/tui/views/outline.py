@@ -2,6 +2,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import ListItem, ListView, Static
 
 from littera.tui import keymap
+from littera.tui.queries import display_title
 from littera.tui.state import AppState
 from littera.tui.views.base import View
 
@@ -17,7 +18,7 @@ class OutlineView(View):
         """Build breadcrumb path string like: Work > Doc > Section"""
         parts = ["Work"]
         for elem in state.path:
-            parts.append(elem.title)
+            parts.append(display_title(elem.title))
         return " > ".join(parts)
 
     def _get_model_help(self, nav_level: str) -> str:
@@ -86,7 +87,7 @@ class OutlineView(View):
                 return f"No documents yet.\nPress 'a' to add one.\n{model_help}"
             last = state.path[-1]
             return (
-                f"No {nav_level} in '{last.title}' yet.\n"
+                f"No {nav_level} in '{display_title(last.title)}' yet.\n"
                 f"Press 'a' to add one.\n{model_help}"
             )
         return model_help
@@ -114,7 +115,7 @@ class OutlineView(View):
             if outline_item.kind == "block":
                 display = f"{label}  ({outline_item.language}) {outline_item.title}"
             else:
-                display = f"{label}  {outline_item.title}"
+                display = f"{label}  {display_title(outline_item.title)}"
             items.append(ListItem(Static(display), id=f"{prefix}-{outline_item.id}"))
 
         detail = self.detail_text(state)

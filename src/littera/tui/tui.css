@@ -31,6 +31,10 @@
 }
 
 #detail {
+  /* The rest of the row, not the screen width: wider text is clipped. */
+  width: 1fr;
+  height: 1fr;
+  overflow-y: auto;
   padding: 1;
 }
 

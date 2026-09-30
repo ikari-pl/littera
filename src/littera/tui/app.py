@@ -1018,7 +1018,7 @@ class LitteraApp(App):
             self._render_view()
 
         self.push_screen(
-            InputDialog(f"Edit {kind_label}", "New title:", current_title),
+            InputDialog(f"Edit {kind_label}", "New title:", current_title or ""),
             on_title_result,
         )
 
